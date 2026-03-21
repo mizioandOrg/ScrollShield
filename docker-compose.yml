@@ -1,0 +1,40 @@
+services:
+  android-builder:
+    build:
+      context: .
+      dockerfile: docker/android-builder/Dockerfile
+      target: builder
+    volumes:
+      - gradle-cache:/home/appuser/.gradle
+      - apk-output:/workspace/app/build/outputs/apk/debug
+    environment:
+      - GRADLE_OPTS=-Xmx2g -XX:MaxMetaspaceSize=512m
+
+  ml-pipeline:
+    build:
+      context: .
+      dockerfile: docker/ml-pipeline/Dockerfile
+      target: trainer
+    volumes:
+      - ml-output:/workspace/ml/output
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+
+  signature-api:
+    build:
+      context: .
+      dockerfile: docker/signature-api/Dockerfile
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  gradle-cache:
+  apk-output:
+  ml-output:

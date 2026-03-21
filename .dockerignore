@@ -1,0 +1,9 @@
+.git/
+.github/
+docs/
+work-items/
+orchestration/
+claude-planner-reviewer-implementer/
+**/.DS_Store
+**/__pycache__/
+**/*.pyc
