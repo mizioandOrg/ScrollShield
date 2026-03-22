@@ -26,6 +26,7 @@ ScrollShield is a single-APK Android app targeting API 28+. Stack: Kotlin, Jetpa
 - `app/src/main/java/com/scrollshield/di/AppModule.kt`
 - `app/src/main/java/com/scrollshield/di/DatabaseModule.kt`
 - `app/src/main/java/com/scrollshield/di/ClassificationModule.kt`
+- `app/src/main/java/com/scrollshield/di/MediaProjectionModule.kt`
 - `app/src/main/res/xml/accessibility_service_config.xml`
 - Directory stubs for all packages in the file structure
 
@@ -70,6 +71,7 @@ Dependencies (with minimum versions from spec):
 | DataStore (Proto) | latest stable |
 | JUnit5, Espresso, Robolectric | latest stable |
 | Kotlin Coroutines + Flow | latest stable |
+| MediaProjection API | (system API, no external dep) |
 
 ### `accessibility_service_config.xml`
 ```xml
@@ -92,12 +94,13 @@ class ScrollShieldApp : Application()
 ### DI modules
 - `AppModule.kt`: provide application context, coroutine dispatchers
 - `DatabaseModule.kt`: provide Room database singleton, all DAOs
-- `ClassificationModule.kt`: provide TFLite interpreter, pipeline components
+- `ClassificationModule.kt`: provide TFLite interpreters (visual + text models), MediaProjection manager, pipeline components
 
 ### AndroidManifest.xml
 Declare permissions:
 - `SYSTEM_ALERT_WINDOW` (overlay)
-- `FOREGROUND_SERVICE` (MediaProjection fallback)
+- `FOREGROUND_SERVICE` (MediaProjection screen capture — primary classification path)
+- `FOREGROUND_SERVICE_MEDIA_PROJECTION` (required for MediaProjection on API 34+)
 - `INTERNET` (signature sync only)
 - `ACCESS_NETWORK_STATE` (WiFi check for sync)
 - `RECEIVE_BOOT_COMPLETED` (WorkManager)
@@ -107,9 +110,9 @@ Declare accessibility service with config reference.
 ### Milestones (from original spec Implementation Order)
 
 Map work items to delivery milestones:
-- **MVP** (original steps 1-5): WI-01, WI-02, WI-03, WI-04, WI-05, WI-06 (Tier 2 + Skip Decision), WI-08
-- **V1** (original steps 1-9): MVP + WI-06 (full pipeline), WI-07, WI-09, WI-10, WI-11
-- **V1.1** (original steps 10-12): V1 + WI-12, WI-13, WI-14, WI-15
+- **MVP** (original steps 1-5): WI-01, WI-02, WI-03, WI-04, WI-05, WI-06 (Tier 0b + Skip Decision), WI-08, WI-16
+- **V1** (original steps 1-9): MVP + WI-06 (full pipeline with Tier 1 visual), WI-07, WI-09, WI-10, WI-11
+- **V1.1** (original steps 10-12): V1 + WI-12, WI-13, WI-14, WI-15, WI-17, WI-18
 
 ## Acceptance Criteria
 - Project compiles with `./gradlew assembleDebug`
