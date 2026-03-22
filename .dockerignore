@@ -7,3 +7,15 @@ claude-planner-reviewer-implementer/
 **/.DS_Store
 **/__pycache__/
 **/*.pyc
+
+# Visual ML pipeline — large artifacts excluded from build context
+ml/datasets/
+ml/output/
+datasets/
+*.tflite
+*.onnx
+*.pt
+*.pth
+*.h5
+.dvc/cache/
+.dvc/tmp/

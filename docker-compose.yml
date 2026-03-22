@@ -22,6 +22,35 @@ services:
         limits:
           memory: 8G
 
+  ml-visual-pipeline:
+    build:
+      context: .
+      dockerfile: docker/ml-pipeline/Dockerfile
+      target: visual-trainer
+    volumes:
+      - ./datasets/screenshots:/workspace/ml/datasets:ro
+      - ml-visual-output:/workspace/ml/output
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  ml-visual-export:
+    build:
+      context: .
+      dockerfile: docker/ml-pipeline/Dockerfile
+      target: visual-export
+    volumes:
+      - ml-visual-output:/workspace/ml/output
+
   signature-api:
     build:
       context: .
@@ -38,3 +67,4 @@ volumes:
   gradle-cache:
   apk-output:
   ml-output:
+  ml-visual-output:
