@@ -24,7 +24,7 @@ These data classes are the shared vocabulary of the entire app. Every other work
 
 ## Detailed Specification
 
-### FeedItem (12 fields)
+### FeedItem (13 fields)
 ```kotlin
 data class FeedItem(
     val id: String,                // SHA-256 of (captionText + creatorName + app + feedPosition)
@@ -38,7 +38,8 @@ data class FeedItem(
     val rawNodeDump: String,       // Debug only — stripped in release builds, max 4KB
     val feedPosition: Int,         // Position in the feed back-stack (0 = first loaded)
     val accessibilityNodeId: Long?, // Accessibility node identifier for re-verification
-    val detectedDurationMs: Long?  // Duration of content if detectable from accessibility tree
+    val detectedDurationMs: Long?, // Duration of content if detectable from accessibility tree
+    val screenCapture: Bitmap?,        // Screen capture from MediaProjection, null if unavailable
 )
 ```
 
@@ -52,7 +53,7 @@ data class ClassifiedItem(
     val confidence: Float,         // 0.0 to 1.0
     val topicVector: FloatArray,   // 20-dimensional, maps to TopicCategory entries
     val topicCategory: TopicCategory, // Dominant topic from topicVector argmax
-    val tier: Int,                 // Which tier classified it (1, 2, or 3)
+    val tier: Int,                 // Which tier classified it (0 = text fast-path, 1 = visual, 2 = deep text)
     val latencyMs: Long,
     val classifiedAt: Long,        // Unix epoch ms when classification was performed
     val skipDecision: SkipDecision // Pre-computed skip/show decision
@@ -170,7 +171,8 @@ data class AdSignature(
     val firstSeen: Long,
     val expires: Long,
     val source: String,
-    val locale: String?
+    val locale: String?,
+    val visualHash: String?            // Perceptual hash of ad screenshot for visual signature matching
 )
 ```
 
@@ -206,6 +208,9 @@ Include ScanMap lifecycle rules as KDoc:
 - `TopicCategorySetConverter` round-trips correctly
 - `ScoringWeights` defaults match spec values (0.35, 0.25, 0.15, 0.25)
 - `rawNodeDump` is annotated or documented as debug-only, max 4KB
+- FeedItem has 13 fields including `screenCapture`
+- AdSignature includes `visualHash` field
+- ClassifiedItem `tier` field documents tiers 0, 1, 2
 
 ## Notes
 - Room `@Entity` annotations on `UserProfile` require TypeConverters for complex types — implement all converters in this work item.

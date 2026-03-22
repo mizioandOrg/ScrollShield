@@ -13,9 +13,11 @@ Implement the AccessibilityService that monitors target apps, extracts feed cont
 ## Context
 This is the foundational service that powers both features. It runs as an Android AccessibilityService, monitors TikTok/Instagram/YouTube, extracts FeedItem data from the accessibility tree, and provides gesture dispatch for pre-scanning and auto-skipping. The user never leaves the native app.
 
+The service also manages the MediaProjection session for screen capture. MediaProjection provides the visual input for Tier 1 (primary) visual classification. The service acquires frames via ImageReader and passes them to the classification pipeline alongside the FeedItem extracted from the accessibility tree.
+
 ## Dependencies
-- **Hard**: WI-02 (FeedItem model), WI-04 (FeedFingerprint for lastValidatedHash)
-- **Integration**: WI-01 (manifest declares service), WI-09 (pre-scan uses gesture dispatch)
+- **Hard**: WI-02 (FeedItem model including screenCapture field), WI-04 (FeedFingerprint for lastValidatedHash)
+- **Integration**: WI-01 (manifest declares service + MediaProjection permission), WI-09 (pre-scan uses gesture dispatch), WI-16 (ScreenCaptureManager for frame acquisition)
 
 ## Files to Create / Modify
 
@@ -62,14 +64,30 @@ These resource IDs may change between app versions — the `compat/` package pro
 
 6. **WebView detection**: If a WebView is detected in the accessibility tree (e.g., in-app browser), pause interception. Resume on WebView close with ScanMap validation via `lastValidatedHash`.
 
+7. Not used (reserved).
+
+8. **Screen capture**: Manage `MediaProjection` session and `ImageReader` for visual classification input.
+   - Acquire `MediaProjection` token via `MediaProjectionManager.createScreenCaptureIntent()` (one-time user permission during onboarding).
+   - Create `VirtualDisplay` connected to `ImageReader` at device resolution.
+   - On each feed item encounter: call `ImageReader.acquireLatestImage()`, convert to `Bitmap`, attach to `FeedItem.screenCapture`.
+   - Frame capture budget: < 15ms.
+   - If MediaProjection not granted: `FeedItem.screenCapture = null`, pipeline proceeds with text-only classification (Tier 0 + Tier 2).
+
 ### Privacy constraint
 - `onAccessibilityEvent()` performs early return for non-target packages — no data captured from other apps.
 - **Service processes zero data when in the background or when no target app is in the foreground.** This means no accessibility tree traversal, no gesture dispatch, no classification, and no session recording when the service is running but no target app is foregrounded.
 
 ### Fallback Strategy
-If accessibility tree is too shallow:
-1. Screen-capture OCR via `MediaProjection` API (one-time user permission). Requires foreground service notification (persistent, low-priority). Uses ML Kit Text Recognition as primary OCR engine.
-2. If OCR insufficient: degrade to label-only detection (Tier 2).
+MediaProjection is now the **primary** screen capture mechanism for visual classification (Tier 1). It is always active when granted, not just as a fallback.
+
+If accessibility tree is too shallow for text extraction:
+1. Visual classification (Tier 1) continues normally — it does not depend on the accessibility tree.
+2. Text-based tiers (Tier 0, Tier 2) degrade: OCR via ML Kit / Tesseract extracts text from the screen capture for Tier 0/Tier 2 input.
+3. If OCR also fails: rely on Tier 1 visual classification alone.
+
+If MediaProjection is not granted:
+1. Fall back to text-only classification (Tier 0 + Tier 2). Tier 1 visual is unavailable.
+2. Show persistent notification: "ScrollShield visual protection unavailable — grant screen capture for full protection."
 
 ### Compat Layer
 - `AppCompatLayer.kt`: Base abstract class with methods `extractCreator()`, `extractCaption()`, `extractAdLabel()`, `extractHashtags()`
@@ -87,6 +105,10 @@ If accessibility tree is too shallow:
 - No ANR under rapid gesture dispatch
 - Battery impact: < 3% additional drain per hour (~20-30mW sustained)
 - Service processes zero data when no target app is in the foreground
+- MediaProjection frame capture completes in < 15ms
+- FeedItem.screenCapture populated when MediaProjection is granted
+- FeedItem.screenCapture is null (not crash) when MediaProjection is not granted
+- Foreground service notification displayed during MediaProjection session
 
 ## Notes
 - Open Question 1 (Back-stack depth): How many items does TikTok keep in its back-stack before evicting? If limit < 10, reduce `preScanBufferSize` dynamically. Implement back-stack limit detection (detect duplicate items during scrollForward).

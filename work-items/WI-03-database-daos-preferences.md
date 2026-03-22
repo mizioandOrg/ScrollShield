@@ -91,6 +91,9 @@ interface SignatureDao {
 
     @Query("DELETE FROM ad_signatures WHERE source = 'synced' AND id IN (:ids)")
     suspend fun deleteSyncedByIds(ids: List<String>)
+
+    @Query("SELECT visualHash FROM ad_signatures WHERE visualHash IS NOT NULL AND expires > :now")
+    suspend fun getActiveVisualHashes(now: Long): List<String>
 }
 ```
 
@@ -115,7 +118,7 @@ interface ProfileDao {
 ### UserPreferencesStore
 - Backed by DataStore (Proto)
 - Uses `EncryptedSharedPreferences` for sensitive data (PIN hash, profile settings)
-- Stores: active profile ID, onboarding completed flag, feature toggles, advanced settings (CPM overrides, buffer sizes, status dot thresholds)
+- Stores: active profile ID, onboarding completed flag, feature toggles, advanced settings (CPM overrides, buffer sizes, status dot thresholds), **mediaProjectionGranted flag**, **visualClassificationEnabled flag** (default: true)
 
 ### Optional SQLCipher
 - User-configurable in Settings > Advanced
@@ -130,6 +133,8 @@ interface ProfileDao {
 - DataStore preferences persist across app restarts
 - `EncryptedSharedPreferences` used for sensitive fields
 - Database auto-migration infrastructure is in place
+- `mediaProjectionGranted` and `visualClassificationEnabled` preferences persist across app restarts
+- `getActiveVisualHashes()` returns only non-null, non-expired visual hashes
 
 ## Notes
 - Data retention policy (90-day raw sessions → monthly aggregates) is implemented in WI-13, not here. This WI provides the DAO methods (`deleteOlderThan`) that WI-13 will call.

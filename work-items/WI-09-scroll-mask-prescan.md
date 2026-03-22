@@ -19,8 +19,8 @@ This eliminates the timing race between classification and video rendering. Ther
 The user never leaves the native app. TikTok renders normally — full video, audio, native UI. ScrollShield is invisible during normal playback; the only visible interruptions are the pre-scan loading animation (~5s) and brief skip flashes.
 
 ## Dependencies
-- **Hard**: WI-02 (ScanMap, ClassifiedItem), WI-05 (gesture dispatch, lifecycle events), WI-06 (classification pipeline), WI-07 (active profile for skip decisions)
-- **Integration**: WI-08 (OverlayService for loading overlay)
+- **Hard**: WI-02 (ScanMap, ClassifiedItem), WI-05 (gesture dispatch, lifecycle events, screen capture), WI-06 (visual-first classification pipeline), WI-07 (active profile for skip decisions)
+- **Integration**: WI-08 (OverlayService for loading overlay), WI-16 (ScreenCaptureManager for frame capture during pre-scan)
 
 ## Files to Create / Modify
 
@@ -37,15 +37,17 @@ When the user opens a target app with mask enabled:
 1. **Show loading overlay**: Full-screen branded animation over the app. Shield icon with progress indicator. Text: "ScrollShield is preparing your feed." Blocks interaction during pre-scan.
 
 2. **Fast-forward scan**: Call `feedInterceptionService.scrollForwardFast(bufferSize)` where `bufferSize` is configurable (default: 10). For each item:
-   - Capture FeedItem via feed interception service
-   - Classify via classification pipeline (computes skip decision)
+   - Wait 100ms for app to render new content after gesture
+   - Capture screen frame via ScreenCaptureManager (< 15ms)
+   - Capture FeedItem via feed interception service (attach screenCapture)
+   - Classify via visual-first classification pipeline (Tier 0 → Tier 1 → Tier 2 as needed)
    - Store in ScanMap
 
 3. **Rewind to start**: Call `feedInterceptionService.scrollBackwardFast(bufferSize)`. **Feed mutation risk**: After rewind, verify position 0 fingerprint matches pre-scan snapshot. If platform mutated feed during pre-scan, re-scan from new position 0.
 
 4. **Dismiss loading overlay**: User sees first video. ScrollShield is ready.
 
-**Expected pre-scan duration**: 10 items x (200ms gesture + 60ms classification) = ~2.6s, plus ~2s rewind. Total: **~5 seconds**.
+**Expected pre-scan duration**: 10 items × (~295ms per item: 100ms gesture + 100ms settle + 15ms capture + 80ms classify) = ~3.0s forward scan, plus ~2.0s rewind, plus ~0.5s overlay setup. Total: **~5.5 seconds**. The loading overlay does not interfere with screen capture — MediaProjection captures the underlying app window, not the overlay layer.
 
 ### ScanMap Runtime
 - All mutable access guarded by `Mutex` for thread safety between pre-scan coroutine and user scroll handler
@@ -66,8 +68,10 @@ When the user opens a target app with mask enabled:
 ### Configuration Constants
 ```
 preScanBufferSize = 10
-gestureIntervalMs = 200
+gestureIntervalMs = 200          // Total inter-gesture budget (100ms settle + capture/classify fills remainder)
 gestureDurationMs = 100
+frameCaptureSettleMs = 100       // Wait after gesture for app to render before capture
+frameCaptureBudgetMs = 15        // Target frame acquisition time
 ```
 
 ### Edge Case: Back-Stack Limit
@@ -102,7 +106,7 @@ Re-ranking feed items based on user interest scores is deferred to V2. The curre
 
 ## Acceptance Criteria
 - **Loading overlay appears within 500ms of target app foregrounding**
-- Pre-scan of 10 items completes in < 6 seconds
+- Pre-scan of 10 items completes in < 6 seconds (accommodates visual capture overhead)
 - Rewind returns to the first video accurately
 - Loading overlay dismisses and user sees first video
 - **Pre-computed skip decisions execute with zero additional classification latency**
@@ -118,3 +122,4 @@ Re-ranking feed items based on user interest scores is deferred to V2. The curre
 ## Notes
 - Open Question 2 (Pre-scan detectability): Does TikTok detect rapid automated scrolling and penalise the account? May need to slow pre-scan to 300-400ms per item. A/B test with 200ms vs 350ms intervals on test accounts.
 - Open Question 6 (Battery during pre-scan): The pre-scan is a burst of activity. Measure peak power draw and thermal impact.
+- During pre-scan, the loading overlay is rendered on a separate window layer. MediaProjection captures the underlying app content, not the overlay, so frame capture is unaffected by the loading animation.
