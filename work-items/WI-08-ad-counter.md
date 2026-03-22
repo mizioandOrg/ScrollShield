@@ -11,8 +11,8 @@ Implement the ad counter overlay feature: session management, counting logic, ov
 The Ad Counter is Feature 1 — purely observational. It counts every ad served during a session and displays the count in a floating overlay pill. It never modifies the feed.
 
 ## Dependencies
-- **Hard**: WI-02 (ClassifiedItem, SessionRecord), WI-05 (lifecycle events, APP_FOREGROUND/BACKGROUND), WI-06 (ClassifiedItem events)
-- **Integration**: WI-03 (SessionDao for persistence), WI-07 (active profile for budget thresholds)
+- **Hard**: WI-02 (ClassifiedItem, SessionRecord), WI-05 (lifecycle events, APP_FOREGROUND/BACKGROUND), WI-06 (ClassifiedItem events from visual-first pipeline)
+- **Integration**: WI-03 (SessionDao for persistence), WI-07 (active profile for budget thresholds), WI-16 (ScreenCaptureManager provides visual input to pipeline)
 
 ## Files to Create / Modify
 
@@ -33,6 +33,7 @@ The Ad Counter is Feature 1 — purely observational. It counts every ad served 
 - Subscribes to ClassifiedItem events from both pre-scan phase and live scrolling
 - Increments on `OFFICIAL_AD` or `INFLUENCER_PROMO`
 - Tracks brands, categories
+- Tracks classification tier used (Tier 0 text fast-path vs. Tier 1 visual vs. Tier 2 deep text) for analytics
 - Revenue estimate: `adCount * platformCPM / 1000`
   - TikTok: $10 CPM
   - Instagram: $12 CPM
@@ -57,7 +58,7 @@ The Ad Counter is Feature 1 — purely observational. It counts every ad served 
 
 ### UI — Summary Card (expanded)
 - Bottom-anchored, 40% height
-- Shows: ads detected, ads skipped, ad-to-content ratio, brand pills, category pills, revenue, duration
+- Shows: ads detected, ads skipped, ad-to-content ratio, brand pills, category pills, revenue, duration, **detection method breakdown (visual vs. text)**
 - Close -> collapse
 - Export -> JSON to Downloads. JSON schema includes a `version` key for forward compatibility.
 
@@ -85,6 +86,7 @@ Passive visual changes on the pill — no blocking:
 - Child hard stop at 100%
 - Satisfaction survey displays on session end, auto-dismisses after 10s
 - Checkpoint every 60s with `endedNormally = false`
+- Detection method breakdown accurately reflects Tier 0/1/2 counts
 
 ## Notes
 - The OverlayService is shared with the Scroll Mask feature (WI-09, WI-10). Define the service interface here; mask overlays plug into the same service.

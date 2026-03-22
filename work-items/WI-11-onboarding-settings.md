@@ -37,6 +37,7 @@ Onboarding guides first-time users through app selection, interest selection, bl
 8. **Permissions**:
    - Accessibility Service: navigate user to system settings, verify activation on return, re-prompt with explanation if not enabled
    - Overlay: `Settings.canDrawOverlays()` check, navigate to `ACTION_MANAGE_OVERLAY_PERMISSION` if needed
+   - **Screen Capture (MediaProjection)**: Launch `MediaProjectionManager.createScreenCaptureIntent()`. Explain: "ScrollShield uses screen capture to visually detect ads from the actual pixels on screen — this is the primary protection method and cannot be defeated by apps hiding their labels." If denied: show warning that visual classification is unavailable and protection will rely on text-only detection.
    - Clear explanations for each permission
 9. **Done**: Confirmation + first-session tip
 
@@ -50,7 +51,7 @@ Onboarding guides first-time users through app selection, interest selection, bl
 ### Settings Screen
 - Profile switcher at top
 - Per-profile: all onboarding choices editable
-- Advanced section: scoring weight sliders, CPM overrides, pre-scan buffer size, extension size, status dot thresholds
+- Advanced: scoring weight sliders, CPM overrides, pre-scan buffer size, extension size, status dot thresholds, **visual classification toggle** (default: on), **MediaProjection re-grant button**
 - Data section: export CSV/JSON, delete all data
 - Child profile management: edit, reset, change PIN
 - **Authentication**: Access to child profile settings requires biometric or PIN authentication
@@ -68,6 +69,9 @@ Onboarding guides first-time users through app selection, interest selection, bl
 - Biometric/PIN required for child profile settings
 - Delete all data wipes everything (database + preferences)
 - App selection only shows installed target apps
+- MediaProjection permission requested during onboarding with clear explanation
+- Visual classification toggle in Advanced settings
+- MediaProjection denial shows warning about reduced protection
 
 ## Notes
 - All UI uses Jetpack Compose per the tech stack.

@@ -12,7 +12,7 @@ After the pre-scan phase (WI-09), the user scrolls through the feed. This work i
 
 ## Dependencies
 - **Hard**: WI-09 (ScanMap, PreScanController, ScrollMaskManager)
-- **Integration**: WI-05 (gesture dispatch for skip execution), WI-08 (OverlayService for skip flash)
+- **Integration**: WI-05 (gesture dispatch for skip execution), WI-08 (OverlayService for skip flash), WI-16 (ScreenCaptureManager for extension frame capture)
 
 ## Files to Create / Modify
 
@@ -60,7 +60,7 @@ User reaches position 7 (scanHead - 3 = trigger):
   -> User continues scrolling unaware
 ```
 
-The extension uses the same fast-forward technique but operates beyond the user's current position. It scrolls ahead, classifies, then scrolls back. 5 items x 260ms = 1.3 seconds.
+The extension uses the same fast-forward technique but operates beyond the user's current position. It scrolls ahead, classifies (with visual capture), then scrolls back. 5 items × 295ms = ~1.5 seconds (vs. old 1.3s with text-only). This still completes before the user naturally scrolls 3 more items.
 
 **Note on scroll-back visibility**: During lookahead extension, the user may briefly see the feed jump forward and back. For V1, this brief visual disruption is accepted as a known trade-off.
 
@@ -90,6 +90,7 @@ skipFlashDurationMs = 200
 consecutiveSkipIntervalMs = 300
 liveGestureDurationMs = 150
 maxConsecutiveSkips = 5
+frameCaptureSettleMs = 100       // Wait after gesture for app to render before capture
 ```
 
 ## Acceptance Criteria
