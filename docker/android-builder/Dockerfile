@@ -14,6 +14,7 @@ RUN apt-get update && \
 # Install Android SDK command-line tools
 RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
     curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/cmdline-tools.zip && \
+    echo "2d2d50857e4eb553af5a6dc3ad507a17adf43d115264b1afc116f95c92e5e258  /tmp/cmdline-tools.zip" | sha256sum -c - && \
     unzip -q /tmp/cmdline-tools.zip -d ${ANDROID_HOME}/cmdline-tools && \
     mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest && \
     rm /tmp/cmdline-tools.zip
@@ -26,6 +27,7 @@ RUN yes | sdkmanager --licenses > /dev/null 2>&1 && \
 
 # Install Gradle to bootstrap the wrapper
 RUN curl -fsSL https://services.gradle.org/distributions/gradle-8.5-bin.zip -o /tmp/gradle.zip && \
+    echo "9d926787066a081739e8200858338b4a69e837c3a821a33aca9db09dd4a41026  /tmp/gradle.zip" | sha256sum -c - && \
     unzip -q /tmp/gradle.zip -d /opt && \
     rm /tmp/gradle.zip
 ENV PATH="/opt/gradle-8.5/bin:${PATH}"
