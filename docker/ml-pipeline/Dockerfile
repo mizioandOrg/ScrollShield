@@ -100,6 +100,6 @@ CMD ["sh", "-c", "python export_visual_tflite.py"]
 FROM alpine:3.19 AS visual-artifact
 RUN adduser -D -u 1000 mluser
 WORKDIR /output
-COPY --from=visual-trainer /workspace/ml/output/ /output/
+COPY --from=visual-export /workspace/ml/output/ /output/
 USER mluser
 CMD ["ls", "-la", "/output/"]
