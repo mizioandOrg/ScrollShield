@@ -4,3 +4,5 @@ tensorflow==2.14.1
 numpy==1.26.3
 datasets==2.16.1
 scikit-learn==1.3.2
+onnx==1.15.0
+onnx-tf==1.10.0
