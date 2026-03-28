@@ -113,13 +113,6 @@ so the new key takes effect immediately without rebuilding the image.
 
 ---
 
-## Workspace mount
-
-The repo root is bind-mounted at `/workspace` inside every container.
-Changes made inside the container are reflected on the host and vice versa.
-
----
-
 ## Python dependencies
 
 Python packages are pre-installed at image build time using the same
