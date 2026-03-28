@@ -1,0 +1,69 @@
+# Dev SSH containers — provides IDE-attachable SSH endpoints for each
+# service. Bring up with:
+#
+#   DEV_SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)" \
+#     docker compose -f docker/dev/docker-compose.dev.yml up -d --build
+#
+# Connect:
+#   ssh -p 2244 devuser@127.0.0.1   # android-dev
+#   ssh -p 2243 devuser@127.0.0.1   # ml-dev
+#   ssh -p 2242 devuser@127.0.0.1   # signature-api-dev
+
+services:
+
+  android-dev:
+    build:
+      # Build context is repo root so the Dockerfile can COPY repo files.
+      context: ../..
+      dockerfile: docker/dev/android-dev/Dockerfile
+    ports:
+      # Bound to 127.0.0.1 on the host — not exposed to the network.
+      - "127.0.0.1:2244:22"
+    environment:
+      - DEV_SSH_PUBKEY
+    volumes:
+      # Named volume for /home/devuser — persists shell history, editor
+      # config, gradle caches, etc. across container restarts.
+      - android-dev-home:/home/devuser
+      # Named volume for SSH host keys — prevents spurious host-key-changed
+      # warnings each time the container is recreated.
+      - android-dev-host-keys:/etc/ssh/host-keys
+      # Mount repo source read-write so the developer can edit and build.
+      - ../../:/workspace
+    restart: unless-stopped
+
+  ml-dev:
+    build:
+      context: ../..
+      dockerfile: docker/dev/ml-dev/Dockerfile
+    ports:
+      - "127.0.0.1:2243:22"
+    environment:
+      - DEV_SSH_PUBKEY
+    volumes:
+      - ml-dev-home:/home/devuser
+      - ml-dev-host-keys:/etc/ssh/host-keys
+      - ../../:/workspace
+    restart: unless-stopped
+
+  signature-api-dev:
+    build:
+      context: ../..
+      dockerfile: docker/dev/signature-api-dev/Dockerfile
+    ports:
+      - "127.0.0.1:2242:22"
+    environment:
+      - DEV_SSH_PUBKEY
+    volumes:
+      - signature-api-dev-home:/home/devuser
+      - signature-api-dev-host-keys:/etc/ssh/host-keys
+      - ../../:/workspace
+    restart: unless-stopped
+
+volumes:
+  android-dev-home:
+  android-dev-host-keys:
+  ml-dev-home:
+  ml-dev-host-keys:
+  signature-api-dev-home:
+  signature-api-dev-host-keys:
