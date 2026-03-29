@@ -13,7 +13,7 @@ services:
 
   android-dev:
     build:
-      # Build context is repo root so the Dockerfile can COPY repo files.
+      # Build context is repo root so the Dockerfile can COPY requirements files.
       context: ../..
       dockerfile: docker/dev/android-dev/Dockerfile
     ports:
@@ -28,8 +28,6 @@ services:
       # Named volume for SSH host keys — prevents spurious host-key-changed
       # warnings each time the container is recreated.
       - android-dev-host-keys:/etc/ssh/host-keys
-      # Mount repo source read-write so the developer can edit and build.
-      - ../../:/workspace
     restart: unless-stopped
 
   ml-dev:
@@ -43,7 +41,6 @@ services:
     volumes:
       - ml-dev-home:/home/devuser
       - ml-dev-host-keys:/etc/ssh/host-keys
-      - ../../:/workspace
     restart: unless-stopped
 
   signature-api-dev:
@@ -57,7 +54,6 @@ services:
     volumes:
       - signature-api-dev-home:/home/devuser
       - signature-api-dev-host-keys:/etc/ssh/host-keys
-      - ../../:/workspace
     restart: unless-stopped
 
 volumes:
