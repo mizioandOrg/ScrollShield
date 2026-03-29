@@ -24,13 +24,14 @@ Session recording is done by the Ad Counter (WI-08) during sessions. This work i
 
 ### Weekly Report
 - Generated via WorkManager 7-day PeriodicWorkRequest, anchored to Sunday midnight in device timezone
-- Contents: total time (split by profile), ads detected and skipped, top 5 targeting brands, ad-to-content ratio trend, satisfaction average
+- Contents: total time (split by profile), ads detected and skipped, top 5 targeting brands, ad-to-content ratio trend, satisfaction average, **classification method breakdown (Tier 0 text / Tier 1 visual / Tier 2 deep text)**
 - In-app display + JSON export
 - Triggers notification: "Your weekly ScrollShield report is ready"
 
 ### Monthly Aggregates
 - Computed at month end: total sessions, total duration, total ads detected, total ads skipped, average satisfaction, per-app breakdown, top 10 ad brands
 - Stored as summary records for long-term trend analysis
+- Also tracks: classification tier distribution (percentage of items classified by visual vs. text methods), visual classifier accuracy feedback (items manually reviewed by user)
 
 ### Child Activity Report
 - Parent-facing: child sessions only
@@ -58,6 +59,8 @@ Session recording is done by the Ad Counter (WI-08) during sessions. This work i
 - Report screen renders < 1s with 90 days of data
 - Monthly aggregates computed correctly
 - Data retention: raw sessions deleted after 90 days, aggregates kept
+- Classification method breakdown included in weekly report
+- Tier distribution tracked in monthly aggregates
 
 ## Notes
 - Open Question 10 (Feed algorithm adaptation): Platforms may adapt feed algorithms if they detect consistent skipping patterns. The reporting UI should track ad frequency per session over time so users can monitor if ad density is increasing.

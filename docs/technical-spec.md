@@ -28,7 +28,11 @@
 │                                               │
 │   ┌──────────────────────────────────────┐    │
 │   │     Classification Pipeline          │    │
-│   │     (Signature → Label → ML)         │    │
+│   │     (Visual-First + Text Signals)    │    │
+│   └──────────────────┬───────────────────┘    │
+│   ┌──────────────────┴───────────────────┐    │
+│   │     Screen Capture Service           │    │
+│   │     (MediaProjection + ImageReader)   │    │
 │   └──────────────────┬───────────────────┘    │
 │   ┌──────────────────┴───────────────────┐    │
 │   │     Feed Interception Service        │    │
@@ -58,11 +62,12 @@ This eliminates the timing race between classification and video rendering. Ther
 
 - All classification and preference logic runs on-device. No user content leaves the phone.
 - No root or jailbreak required.
-- Target latency for classification pipeline: < 60ms per item.
+- Target latency for classification pipeline: < 100ms per item (visual primary path); < 150ms worst case (all tiers).
 - Must function fully offline — classification, skip decisions, session recording, and reporting all work offline; only signature sync and data export require connectivity.
 - The user always sees native app video. ScrollShield never rebuilds the feed.
 - Peak memory usage: < 150MB (see Memory Budget section below for justified breakdown).
-- Thermal throttling fallback: if device is overheating, skip Tier 3 classification and rely on Tier 1 + Tier 2 only.
+- Thermal throttling fallback: if device is overheating, skip Tier 1 (Visual Classification) and Tier 2 (Deep Text) and rely on Tier 0 (Text Signals: SimHash + Label Detection) only.
+- Visual-first classification: Screen capture via MediaProjection is the primary classification method. Text-based detection (SimHash, label matching, DistilBERT) is supplementary and not relied upon — source apps can defeat text-based detection by renaming accessibility node IDs or removing labels.
 
 ### How the Two Features Relate
 
@@ -97,7 +102,8 @@ data class FeedItem(
     val rawNodeDump: String,       // Debug only — stripped in release builds, max 4KB
     val feedPosition: Int,         // Position in the feed back-stack (0 = first loaded)
     val accessibilityNodeId: Long?, // Accessibility node identifier for re-verification
-    val detectedDurationMs: Long?  // Duration of content if detectable from accessibility tree
+    val detectedDurationMs: Long?, // Duration of content if detectable from accessibility tree
+    val screenCapture: Bitmap?,        // Screen capture from MediaProjection (null if capture unavailable)
 )
 ```
 
@@ -110,7 +116,7 @@ data class ClassifiedItem(
     val confidence: Float,         // 0.0 to 1.0
     val topicVector: FloatArray,   // 20-dimensional, maps to TopicCategory entries
     val topicCategory: TopicCategory, // Dominant topic from topicVector argmax
-    val tier: Int,                 // Which tier classified it (1, 2, or 3)
+    val tier: Int,                 // Which tier classified it (0 = text fast-path, 1 = visual, 2 = deep text)
     val latencyMs: Long,
     val classifiedAt: Long,        // Unix epoch ms when classification was performed
     val skipDecision: SkipDecision // Pre-computed skip/show decision
@@ -335,32 +341,57 @@ If accessibility tree is too shallow for content extraction:
 
 ## Module 2: Classification Pipeline
 
-**What**: Three-tier pipeline that classifies each FeedItem. Used during pre-scan and during live scrolling.
+**What**: Visual-first pipeline that classifies each FeedItem. Screen capture via MediaProjection is the primary detection path. Text-based methods are supplementary fast-path signals.
 
-### Tier 1 — Signature Match (< 5ms)
+### Pipeline Architecture
+
+```
+Tier 0 (Fast-Path) — Text Signals        < 20ms   [supplementary, short-circuit only]
+  ├── Tier 0a: Signature Match (SimHash)   < 5ms
+  └── Tier 0b: Label Detection             < 15ms
+
+Tier 1 (Primary) — Visual Classification  < 80ms   [PRIMARY detection path]
+  └── MobileNetV3-Small on screen capture
+
+Tier 2 (Deep Text) — Content Analysis     < 50ms   [supplementary, runs if Tier 1 inconclusive]
+  └── DistilBERT-tiny on tokenized text
+```
+
+### Tier 0a — Signature Match (< 5ms) [Supplementary Fast-Path]
 
 - 64-bit SimHash of normalised caption against local `ad_signatures` table.
 - Normalisation rules: lowercase, strip emoji, collapse whitespace, remove URLs, remove @mentions.
-- Match criteria: Hamming distance ≤ 3 bits between computed SimHash and stored `simHash`.
-- If match with confidence > 0.95, return immediately.
-- Expected catch: 40–60% of ads.
+- Match criteria: Hamming distance ≤ 3 bits.
+- If match with confidence > 0.95, short-circuit — return immediately without visual classification.
+- Expected catch: 40–60% of known ads (text available and signature cached).
+- **Evasion risk**: Apps can rename/remove text nodes. This tier is opportunistic, not relied upon.
 
-### Tier 2 — Label Detection (< 15ms)
+### Tier 0b — Label Detection (< 15ms) [Supplementary Fast-Path]
 
 - Check `FeedItem.labelText` against known patterns (case-insensitive): `{"Sponsored", "Ad", "Paid partnership", "Promoted", "Anzeige", "Sponsorisé", "Sponsorizzato", "Reklame", "広告", "광고", "Patrocinado", "Реклама", "إعلان"}`.
-- If match: `OFFICIAL_AD`, confidence 1.0.
-- Expected catch: 30–40% of remaining ads.
+- If match: `OFFICIAL_AD`, confidence 1.0, short-circuit.
+- **Evasion risk**: Apps can rename or remove accessibility labels. This tier catches legally-required labels but is not relied upon.
 
-### Tier 3 — Content Analysis (< 50ms)
+### Tier 1 — Visual Classification (< 80ms) [PRIMARY]
 
-- On-device TFLite model (`scrollshield_classifier.tflite`), float16 quantization.
-- Tokenizer: WordPiece, max 128 tokens. Input text truncated if longer.
-- Input tensor: `int32[1][128]` — token IDs from WordPiece tokenizer of `[captionText] [SEP] [hashtags joined] [SEP] [creatorName]`.
-- Output tensors: `float32[1][7]` — 7-class probability vector (including UNKNOWN), `float32[1][20]` — 20-dimensional topic vector.
+- **Screen capture**: Acquire frame from `MediaProjection` via `ImageReader`. Crop to content region, resize to 224×224 RGB.
+- **Model**: MobileNetV3-Small (~3.4MB TFLite, int8 quantization), fine-tuned on social media ad screenshots.
+- **Input tensor**: `uint8[1][224][224][3]` — RGB pixel values.
+- **Output tensors**:
+  - `float32[1][7]` — 7-class probability vector (maps to Classification enum)
+  - `float32[1][20]` — 20-dimensional topic vector (maps to TopicCategory)
+- **Inference**: TFLite with NNAPI delegate for NPU acceleration on supported devices. Falls back to CPU if NNAPI unavailable.
+- **Latency target**: < 60ms inference on Snapdragon 7-series (confirmed feasible: MobileNetV3-Small achieves ~40ms on Snapdragon 695 with NNAPI).
+- Max probability < 0.7 → fall through to Tier 2 if text is available, otherwise `UNKNOWN`.
+- **Error handling**: If MediaProjection is not granted or capture fails, skip Tier 1 and proceed to Tier 2.
+
+### Tier 2 — Content Analysis (< 50ms) [Supplementary Deep Text]
+
+- Runs only if Tier 0 did not short-circuit AND Tier 1 returned inconclusive (max probability < 0.7).
+- On-device TFLite model (`scrollshield_text_classifier.tflite`), float16 quantization.
 - Architecture: DistilBERT-tiny (4L/128H, ~15MB).
-- Max probability < 0.7 → `UNKNOWN` classification, confidence 0.0, fail open (`SHOW_LOW_CONF`).
-- EDUCATIONAL classification is never auto-skipped regardless of profile settings.
-- **Error handling**: Catch all Tier 3 exceptions (model load failure, inference error) → return `UNKNOWN` with confidence 0.0.
+- Input/output unchanged from original spec.
+- **Error handling**: Catch all exceptions → return `UNKNOWN` with confidence 0.0.
 
 ### Skip Decision (computed as part of classification)
 
@@ -381,12 +412,35 @@ fun computeSkipDecision(item: ClassifiedItem, profile: UserProfile): SkipDecisio
 
 This decision is stored in the `ClassifiedItem` and referenced later when the user reaches that position in the feed.
 
+### Pipeline Router (`ClassificationPipeline.kt`)
+
+```kotlin
+suspend fun classify(feedItem: FeedItem, profile: UserProfile): ClassifiedItem {
+    // Tier 0a — text fast-path (supplementary)
+    val t0a = signatureMatcher.match(feedItem)
+    if (t0a != null && t0a.confidence > 0.95) return t0a.withTier(0).withSkipDecision(profile)
+
+    // Tier 0b — label fast-path (supplementary)
+    val t0b = labelDetector.detect(feedItem)
+    if (t0b != null) return t0b.withTier(0).withSkipDecision(profile)
+
+    // Tier 1 — visual classification (PRIMARY)
+    val t1 = visualClassifier.classify(feedItem)
+    if (t1 != null && t1.confidence >= 0.7) return t1.withTier(1).withSkipDecision(profile)
+
+    // Tier 2 — deep text analysis (supplementary fallback)
+    val t2 = contentClassifier.classify(feedItem)
+    return t2.withTier(2).withSkipDecision(profile)
+}
+```
+
+### Thermal Throttling Fallback
+
+If device is overheating, skip Tier 1 visual classification (GPU/NPU intensive) and Tier 2 — rely on Tier 0 only.
+
 ### Dual-OCR Strategy
 
-When `MediaProjection` fallback is active, OCR is needed to extract text from screen captures:
-
-- **Primary**: ML Kit Text Recognition (requires Google Play Services)
-- **Fallback**: Tesseract4Android — used when Play Services is unavailable
+Unchanged — still applies when text extraction from accessibility tree fails. OCR extracts text for Tier 0 and Tier 2; it is not needed for Tier 1 visual classification.
 
 ### Tesseract4Android Specification
 
@@ -400,12 +454,17 @@ When `MediaProjection` fallback is active, OCR is needed to extract text from sc
 
 **Acceptance criteria**:
 
-- Tier 1: < 5ms with 100K entries.
-- Tier 2: identifies all listed localised labels.
-- Tier 3: loads < 2s cold start, inference < 50ms on Snapdragon 7-series.
-- Full pipeline: < 60ms worst case.
-- F1: > 85% OFFICIAL_AD, > 75% INFLUENCER_PROMO.
+- Tier 0a: < 5ms with 100K entries.
+- Tier 0b: identifies all listed localised labels.
+- Tier 1 (visual): model loads < 1s cold start, inference < 60ms on Snapdragon 7-series, captures frame < 15ms.
+- Tier 2 (text): loads < 2s cold start, inference < 50ms on Snapdragon 7-series.
+- Full pipeline (visual path): < 100ms.
+- Full pipeline (all tiers): < 150ms worst case.
+- F1: > 85% OFFICIAL_AD, > 75% INFLUENCER_PROMO on visual test set.
 - Skip decision computed in < 1ms.
+- EDUCATIONAL items never auto-skipped.
+- Tier 1/Tier 2 failure gracefully falls back to lower tiers or UNKNOWN/SHOW_LOW_CONF.
+- MediaProjection permission denial degrades gracefully to text-only classification.
 
 ---
 
@@ -491,7 +550,7 @@ This is the core innovation. When the user opens a target app with the mask enab
 
 4. **Dismiss loading overlay**: The user now sees the first video. ScrollShield is ready.
 
-**Expected pre-scan duration**: 10 items × (200ms gesture interval + 60ms classification) = ~2.6 seconds, plus ~2 seconds for the rewind. Total: **~5 seconds**. Masked by the loading animation.
+**Expected pre-scan duration**: 10 items × (~295ms per item: 100ms gesture + 100ms settle + 15ms capture + 80ms classify) = ~3.0 seconds, plus ~2.0 seconds for the rewind, plus ~0.5s overlay setup. Total: **~5.5 seconds**. Masked by the loading animation.
 
 ### Live Interception Phase (during scrolling)
 
@@ -785,10 +844,12 @@ scrollshield/
 │   │   └── OverlayService.kt               # Single overlay lifecycle manager
 │   │                                        # (pill, loading, skip flash, summary)
 │   ├── classification/
-│   │   ├── ClassificationPipeline.kt       # 3-tier router
-│   │   ├── SignatureMatcher.kt             # Tier 1
-│   │   ├── LabelDetector.kt               # Tier 2
-│   │   ├── ContentClassifier.kt           # Tier 3 (TFLite)
+│   │   ├── ClassificationPipeline.kt       # Visual-first pipeline router
+│   │   ├── SignatureMatcher.kt             # Tier 0a (supplementary fast-path)
+│   │   ├── LabelDetector.kt               # Tier 0b (supplementary fast-path)
+│   │   ├── VisualClassifier.kt            # Tier 1 (PRIMARY — MobileNetV3-Small)
+│   │   ├── ContentClassifier.kt           # Tier 2 (supplementary deep text)
+│   │   ├── ScreenCaptureManager.kt        # MediaProjection frame acquisition
 │   │   └── SkipDecisionEngine.kt          # Computes skip/show per profile
 │   ├── feature/
 │   │   ├── counter/
@@ -853,7 +914,8 @@ scrollshield/
 │       ├── CosineSimilarity.kt
 │       └── TextNormaliser.kt
 ├── app/src/main/assets/
-│   └── scrollshield_classifier.tflite
+│   ├── scrollshield_visual_classifier.tflite    # MobileNetV3-Small visual model
+│   └── scrollshield_text_classifier.tflite      # DistilBERT-tiny text model (renamed)
 ├── app/src/main/res/xml/
 │   └── accessibility_service_config.xml
 ├── app/src/test/
@@ -907,9 +969,10 @@ scrollshield/
 | Feed interception | AccessibilityService API | — | No root, works with all apps |
 | Gesture dispatch | AccessibilityService.dispatchGesture() | — | Pre-scan scrolling + live skips |
 | Overlays | TYPE_APPLICATION_OVERLAY | — | Counter pill, loading screen, skip flash |
-| On-device ML | TensorFlow Lite | 2.14+ | Mobile-optimised, NPU support |
+| On-device ML (visual) | TensorFlow Lite + MobileNetV3-Small | 2.14+ | Primary visual classification, NPU-accelerated |
+| On-device ML (text) | TensorFlow Lite + DistilBERT-tiny | 2.14+ | Supplementary text classification |
+| Screen capture | MediaProjection API | API 21+ | Visual classification input |
 | OCR | ML Kit Text Recognition / Tesseract4Android | ML Kit 16.0+ | Dual-OCR for MediaProjection fallback |
-| NLP model | DistilBERT-tiny (4L/128H) | — | Small, good text classification |
 | Local storage | Room (SQLite) | 2.6+ | Standard Android persistence |
 | Preferences | DataStore (Proto) | — | Type-safe, async |
 | Background work | WorkManager | 2.9+ | Battery-friendly sync |
@@ -977,15 +1040,18 @@ scrollshield/
 
 | Component | Estimated Usage |
 |-----------|----------------|
-| TFLite model (loaded) | ~15MB |
-| TFLite interpreter | ~10MB |
+| MobileNetV3-Small model (loaded) | ~4MB |
+| MobileNetV3-Small interpreter | ~8MB |
+| DistilBERT-tiny model (loaded) | ~15MB |
+| DistilBERT-tiny interpreter | ~10MB |
+| MediaProjection frame buffer | ~3MB |
 | SimHash index (100K entries) | ~12MB |
 | ScanMap (10-item buffer) | <1MB |
 | Room database connection | ~5MB |
 | Overlay rendering (Compose) | ~15MB |
 | Accessibility tree cache | ~8MB |
 | Coroutines + Flow buffers | ~10MB |
-| **Headroom** | **~74MB** |
+| **Headroom** | **~59MB** |
 | **Total** | **~150MB** |
 
 ### Low-Memory Fallback (<4GB device RAM)
@@ -1084,6 +1150,8 @@ scrollshield/
 
 12. **X/Twitter V2**: X/Twitter uses a non-vertical feed architecture (timeline with mixed media types, quote tweets, threads). Deferred to V2 with dedicated `XCompat` implementation. Key challenges: horizontal scroll within vertical feed, variable-height items, threaded conversations.
 
+13. **Visual model accuracy across devices**: Screen capture resolution and color profile vary across Android devices. The visual classifier must be robust to resolution differences (720p to 1440p), color temperature variation, and night mode filters. *Resolution strategy*: Include resolution/color augmentation in training data. Test on 5 representative devices spanning 720p to 1440p.
+
 ---
 
 ## Alignment with Proposal
@@ -1092,3 +1160,4 @@ scrollshield/
 - **Satisfaction survey**: Fully specified — 1-5 star rating shown post-session, auto-dismiss after 10s, stored in `SessionRecord.satisfactionRating`. Aggregated in weekly and monthly reports.
 - **X/Twitter support**: Deferred to V2 with technical justification. Non-vertical feed architecture requires dedicated `XCompat` implementation (see Open Question 12).
 - **Agent fleet signature sync**: Aligns with Module 6 — server endpoint provides delta sync, local detections feed back into Tier 1 matching, optional opt-in sharing.
+- **Visual-first classification**: The demo proposal's "Content analysis: On-device vision and language models identify product placements, brand logos, discount codes, and call-to-action patterns" is now the primary detection path (Tier 1 visual), not a secondary method. This aligns with the proposal's intent of using "on-device vision models" and the "Neural Engine" for feed interception.
