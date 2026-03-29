@@ -6,21 +6,25 @@ plugins {
 }
 
 android {
-    namespace = "com.scrollshield.app"
+    namespace = "com.scrollshield"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.scrollshield.app"
+        applicationId = "com.scrollshield"
         minSdk = 28
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0-draft"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 
@@ -60,6 +64,10 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 
     implementation("com.google.mlkit:text-recognition:16.0.0")
+
+    implementation("com.github.adaptech-cz:Tesseract4Android:4.7.0") {
+        exclude(group = "com.github.adaptech-cz.Tesseract4Android", module = "tesseract4android-openmp")
+    }
 
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 
