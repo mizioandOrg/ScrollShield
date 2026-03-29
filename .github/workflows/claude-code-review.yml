@@ -12,12 +12,19 @@ on:
 
 jobs:
   claude-review:
-    if: github.event.pull_request.head.repo.fork == false
+    # Security: Only run for trusted contributors to prevent prompt injection.
+    # External PR content (titles, descriptions, comments, code) is attacker-controlled
+    # and can contain hidden instructions to Claude (CVE disclosed Feb 2026, CVSS 7.7).
+    # OWNER / MEMBER / COLLABORATOR are vetted identities on this repo.
+    if: |
+      github.event.pull_request.author_association == 'OWNER' ||
+      github.event.pull_request.author_association == 'MEMBER' ||
+      github.event.pull_request.author_association == 'COLLABORATOR'
 
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
       id-token: write
 
@@ -34,7 +41,6 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review'
+          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-
