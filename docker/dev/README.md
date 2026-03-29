@@ -25,9 +25,15 @@ to the local network.
 ## Quick start
 
 ```bash
-# From repo root
+# From repo root — start all three containers
 DEV_SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)" \
   docker compose -f docker/dev/docker-compose.dev.yml up -d --build
+
+# Start a single container by service name
+DEV_SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)" \
+  docker compose -f docker/dev/docker-compose.dev.yml up -d --build android-dev
+
+# Available service names: android-dev  ml-dev  signature-api-dev
 ```
 
 On first start each container generates its SSH host keys and stores them
