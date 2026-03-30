@@ -9,7 +9,16 @@ RUN apt-get update && \
         curl \
         unzip \
         git \
-        ca-certificates && \
+        ca-certificates \
+        htop \
+        screen \
+        nano && \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends gh && \
     rm -rf /var/lib/apt/lists/*
 
 # -------------------------------------------------------------------
@@ -30,7 +39,17 @@ RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
 ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
 
 RUN yes | sdkmanager --licenses > /dev/null 2>&1 && \
-    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "emulator"
+
+# -------------------------------------------------------------------
+# Node.js (LTS) + Claude Code
+# -------------------------------------------------------------------
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/* && \
+    npm install -g @anthropic-ai/claude-code && \
+    npm cache clean --force
 
 # -------------------------------------------------------------------
 # Gradle
@@ -51,7 +70,9 @@ RUN groupadd -r devuser && \
     useradd -r -g devuser -m -d /home/devuser -s /bin/bash devuser && \
     mkdir -p /home/devuser/.ssh && \
     chmod 700 /home/devuser/.ssh && \
-    chown devuser:devuser /home/devuser/.ssh
+    chown devuser:devuser /home/devuser/.ssh && \
+    groupadd -f kvm && \
+    usermod -aG kvm devuser
 
 # Give devuser read access to the SDK so gradle tasks work
 RUN chown -R root:devuser ${ANDROID_HOME} && \
