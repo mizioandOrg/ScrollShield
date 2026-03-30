@@ -1,7 +1,1 @@
-package com.scrollshield.app
-
-import android.app.Application
-import dagger.hilt.android.HiltAndroidApp
-
-@HiltAndroidApp
-class ScrollShieldApp : Application()
+// This file is intentionally left blank. ScrollShieldApp has moved to com.scrollshield.
