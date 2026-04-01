@@ -1,6 +1,8 @@
 package com.scrollshield.di
 
 import android.content.Context
+import androidx.room.Room
+import com.scrollshield.data.db.ScrollShieldDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -14,8 +16,28 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun providePlaceholderDatabase(@ApplicationContext context: Context): Any {
-        // TODO: Replace with Room database instance in WI-02
-        return context.applicationContext
+    fun provideScrollShieldDatabase(
+        @ApplicationContext context: Context
+    ): ScrollShieldDatabase {
+        // Optional SQLCipher support — OFF by default.
+        // To enable:
+        //   1. Add to build.gradle.kts:
+        //        implementation("net.zetetic:android-database-sqlcipher:4.5.4")
+        //        implementation("androidx.sqlite:sqlite-ktx:2.4.0")
+        //   2. Uncomment:
+        // val passphrase: ByteArray = SQLiteDatabase.getBytes("your-passphrase".toCharArray())
+        // val factory = SupportFactory(passphrase)
+        // return Room.databaseBuilder(context, ScrollShieldDatabase::class.java, "scrollshield.db")
+        //     .openHelperFactory(factory)
+        //     .fallbackToDestructiveMigration()
+        //     .build()
+
+        return Room.databaseBuilder(
+            context,
+            ScrollShieldDatabase::class.java,
+            "scrollshield.db"
+        )
+            .fallbackToDestructiveMigration()
+            .build()
     }
 }
