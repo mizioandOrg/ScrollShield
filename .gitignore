@@ -1,0 +1,31 @@
+# Built outputs
+build/
+app/build/
+**/build/
+
+# Gradle
+.gradle/
+**/.gradle/
+local.properties
+gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio / IntelliJ IDEA
+*.iml
+.idea/
+*.ipr
+*.iws
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+.kotlin/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets — never commit these
+*.keystore
+*.jks
+service-account*.json
