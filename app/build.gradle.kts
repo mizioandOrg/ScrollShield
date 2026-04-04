@@ -15,8 +15,8 @@ android {
         applicationId = "com.scrollshield"
         minSdk = 28
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.5.0-alpha"
+        versionCode = 5
+        versionName = "0.6.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
