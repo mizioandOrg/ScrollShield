@@ -2,6 +2,8 @@ package com.scrollshield.di
 
 import android.content.Context
 import android.media.projection.MediaProjectionManager
+import com.scrollshield.classification.ScreenCaptureManager
+import com.scrollshield.service.MediaProjectionHolder
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -17,4 +19,19 @@ object MediaProjectionModule {
     @Singleton
     fun provideMediaProjectionManager(@ApplicationContext context: Context): MediaProjectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+
+    @Provides
+    @Singleton
+    fun provideScreenCaptureManager(
+        @ApplicationContext context: Context,
+        mediaProjectionManager: MediaProjectionManager
+    ): ScreenCaptureManager = ScreenCaptureManager(context, mediaProjectionManager)
+
+    @Provides
+    @Singleton
+    fun provideMediaProjectionHolder(
+        @ApplicationContext context: Context,
+        mediaProjectionManager: MediaProjectionManager,
+        screenCaptureManager: ScreenCaptureManager
+    ): MediaProjectionHolder = MediaProjectionHolder(context, mediaProjectionManager, screenCaptureManager)
 }
