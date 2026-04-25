@@ -2,7 +2,10 @@ package com.scrollshield.di
 
 import android.content.Context
 import androidx.room.Room
+import com.scrollshield.data.db.ProfileDao
 import com.scrollshield.data.db.ScrollShieldDatabase
+import com.scrollshield.data.db.SessionDao
+import com.scrollshield.data.db.SignatureDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -40,4 +43,16 @@ object DatabaseModule {
             .fallbackToDestructiveMigration()
             .build()
     }
+
+    @Provides
+    fun provideProfileDao(database: ScrollShieldDatabase): ProfileDao =
+        database.profileDao()
+
+    @Provides
+    fun provideSessionDao(database: ScrollShieldDatabase): SessionDao =
+        database.sessionDao()
+
+    @Provides
+    fun provideSignatureDao(database: ScrollShieldDatabase): SignatureDao =
+        database.signatureDao()
 }
