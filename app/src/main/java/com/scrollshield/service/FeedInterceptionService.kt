@@ -82,6 +82,7 @@ class FeedInterceptionService : AccessibilityService() {
 
     override fun onServiceConnected() {
         createNotificationChannel()
+        startService(Intent(this, OverlayService::class.java))
     }
 
     override fun onInterrupt() {
