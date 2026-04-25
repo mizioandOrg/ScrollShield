@@ -15,8 +15,8 @@ android {
         applicationId = "com.scrollshield"
         minSdk = 28
         targetSdk = 34
-        versionCode = 10
-        versionName = "0.11.0-alpha"
+        versionCode = 11
+        versionName = "0.12.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -63,6 +63,10 @@ dependencies {
 
     implementation("com.google.dagger:hilt-android:2.51.1")
     ksp("com.google.dagger:hilt-android-compiler:2.51.1")
+
+    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation("androidx.biometric:biometric:1.1.0")
 
     implementation("org.tensorflow:tensorflow-lite:2.14.0")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
