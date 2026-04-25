@@ -24,7 +24,7 @@
         </activity>
 
         <service
-            android:name=".accessibility.ScrollShieldAccessibilityService"
+            android:name=".service.FeedInterceptionService"
             android:exported="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
@@ -36,13 +36,13 @@
         </service>
 
         <service
+            android:name=".service.OverlayService"
+            android:exported="false" />
+
+        <service
             android:name=".service.ScreenCaptureService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
-
-        <service
-            android:name=".service.FeedInterceptionService"
-            android:exported="false" />
 
     </application>
 </manifest>
