@@ -37,7 +37,12 @@
 
         <service
             android:name=".service.OverlayService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Draws overlay UI for ad counter and scroll mask" />
+        </service>
 
         <service
             android:name=".service.ScreenCaptureService"
