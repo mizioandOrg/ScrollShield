@@ -51,6 +51,10 @@ class MediaProjectionHolder(
             Log.e("MPH", "getMediaProjection failed", e)
             return
         }
+        if (projection == null) {
+            Log.e("MPH", "getMediaProjection returned null")
+            return
+        }
         projection.registerCallback(revocationCallback, null)
         mediaProjection = projection
         persistIntent(data, resultCode)
