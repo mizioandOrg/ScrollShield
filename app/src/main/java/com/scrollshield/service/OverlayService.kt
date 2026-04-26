@@ -58,8 +58,8 @@ import kotlinx.coroutines.launch
 class OverlayService : Service(), OverlayHost {
 
     private lateinit var manager: AdCounterManager
-    private lateinit var profileManager: ProfileManager
-    private lateinit var sessionDao: SessionDao
+    internal lateinit var profileManager: ProfileManager
+    internal lateinit var sessionDao: SessionDao
     private lateinit var database: ScrollShieldDatabase
 
     companion object {
