@@ -2,12 +2,9 @@ package com.scrollshield.ui.onboarding
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -43,24 +40,29 @@ fun InterestSelectionScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(TopicCategory.entries.toList()) { topic ->
-                val isSelected = topic in selectedTopics
-                FilterChip(
-                    selected = isSelected,
-                    onClick = {
-                        if (isSelected || selectionCount < 8) {
-                            onTopicToggle(topic)
-                        }
-                    },
-                    label = { Text(topic.label) },
-                    modifier = Modifier.fillMaxWidth()
-                )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TopicCategory.entries.toList().chunked(2).forEach { rowTopics ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    rowTopics.forEach { topic ->
+                        val isSelected = topic in selectedTopics
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                if (isSelected || selectionCount < 8) {
+                                    onTopicToggle(topic)
+                                }
+                            },
+                            label = { Text(topic.label) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (rowTopics.size == 1) {
+                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
         }
     }
