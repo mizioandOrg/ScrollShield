@@ -2,7 +2,10 @@ package com.scrollshield.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.PixelFormat
@@ -13,18 +16,22 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import com.scrollshield.classification.ScreenCaptureManager
 import com.scrollshield.compat.AppCompatLayer
 import com.scrollshield.compat.InstagramCompat
 import com.scrollshield.compat.TikTokCompat
 import com.scrollshield.compat.YouTubeCompat
 import com.scrollshield.data.model.FeedItem
+import com.scrollshield.feature.mask.ScrollMaskManager
 import com.scrollshield.util.FeedFingerprint
+import dagger.hilt.android.EntryPointAccessors
 import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +65,38 @@ class FeedInterceptionService : AccessibilityService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val mainHandler  = Handler(Looper.getMainLooper())
 
+    private var overlayServiceBound = false
+    private val overlayServiceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            val overlayBinder = binder as? OverlayService.LocalBinder ?: return
+            val overlayService = overlayBinder.getService()
+            val overlayHost = overlayBinder.getHost()
+            overlayServiceBound = true
+
+            val mpManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            val screenCaptureManager = ScreenCaptureManager(applicationContext, mpManager)
+
+            val pipeline = EntryPointAccessors.fromApplication(
+                applicationContext, ClassificationPipelineEntryPoint::class.java
+            ).classificationPipeline()
+
+            val maskManager = ScrollMaskManager(
+                context = applicationContext,
+                feedInterceptionService = this@FeedInterceptionService,
+                screenCaptureManager = screenCaptureManager,
+                classificationPipeline = pipeline,
+                profileManager = overlayService.profileManager,
+                overlayHost = overlayHost
+            )
+            maskManager.initialize(overlayService.sessionDao)
+            overlayService.setScrollMaskManager(maskManager)
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            overlayServiceBound = false
+        }
+    }
+
     @Volatile var activePkg: String? = null
         private set
     @Volatile var feedPosition: Int = 0
@@ -82,7 +121,9 @@ class FeedInterceptionService : AccessibilityService() {
 
     override fun onServiceConnected() {
         createNotificationChannel()
-        startService(Intent(this, OverlayService::class.java))
+        val overlayIntent = Intent(this, OverlayService::class.java)
+        startService(overlayIntent)
+        bindService(overlayIntent, overlayServiceConnection, Context.BIND_AUTO_CREATE)
     }
 
     override fun onInterrupt() {
@@ -91,6 +132,10 @@ class FeedInterceptionService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (overlayServiceBound) {
+            try { unbindService(overlayServiceConnection) } catch (_: Exception) {}
+            overlayServiceBound = false
+        }
         serviceScope.cancel()
         detachMediaProjection()
     }
