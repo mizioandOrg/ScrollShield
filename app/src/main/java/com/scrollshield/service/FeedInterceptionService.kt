@@ -68,7 +68,11 @@ class FeedInterceptionService : AccessibilityService() {
     private var overlayServiceBound = false
     private val overlayServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            val overlayBinder = binder as? OverlayService.LocalBinder ?: return
+            android.util.Log.d("FIS", "OverlayService connected: binder=$binder")
+            val overlayBinder = binder as? OverlayService.LocalBinder ?: run {
+                android.util.Log.e("FIS", "OverlayService binder cast failed")
+                return
+            }
             val overlayService = overlayBinder.getService()
             val overlayHost = overlayBinder.getHost()
             overlayServiceBound = true
@@ -90,6 +94,7 @@ class FeedInterceptionService : AccessibilityService() {
             )
             maskManager.initialize(overlayService.sessionDao)
             overlayService.setScrollMaskManager(maskManager)
+            android.util.Log.d("FIS", "ScrollMaskManager wired successfully")
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -169,14 +174,20 @@ class FeedInterceptionService : AccessibilityService() {
             }
             ?.root?.packageName?.toString()
 
+        android.util.Log.d("FIS", "handleWindowsChanged: targetPkg=$targetPkg activePkg=$activePkg")
+
         val old = activePkg
         if (targetPkg == old) return
 
         activePkg = targetPkg
-        if (old != null && targetPkg == null)
+        if (old != null && targetPkg == null) {
+            android.util.Log.d("FIS", "APP_BACKGROUND: $old")
             sendBroadcast(Intent(ACTION_APP_BACKGROUND).putExtra("pkg", old))
-        if (targetPkg != null && old == null)
+        }
+        if (targetPkg != null && old == null) {
+            android.util.Log.d("FIS", "APP_FOREGROUND: $targetPkg")
             sendBroadcast(Intent(ACTION_APP_FOREGROUND).putExtra("pkg", targetPkg))
+        }
     }
 
     // ---- Content extraction ----
