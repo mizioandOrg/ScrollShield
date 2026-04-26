@@ -9,14 +9,14 @@ plugins {
 
 android {
     namespace = "com.scrollshield"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.scrollshield"
         minSdk = 28
-        targetSdk = 34
-        versionCode = 12
-        versionName = "0.12.1-bugfix"
+        targetSdk = 36
+        versionCode = 13
+        versionName = "0.12.2-bugfix"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -41,6 +41,12 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
 
 }
