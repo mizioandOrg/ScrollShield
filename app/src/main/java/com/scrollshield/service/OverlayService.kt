@@ -25,7 +25,10 @@ import com.scrollshield.feature.counter.AdCounterManager
 import com.scrollshield.feature.counter.AdCounterOverlay
 import com.scrollshield.feature.counter.BudgetState
 import com.scrollshield.feature.counter.SessionSummaryCard
+import com.scrollshield.feature.mask.ScrollMaskManager
 import com.scrollshield.profile.ProfileManager
+import android.os.Handler
+import android.os.Looper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -86,23 +89,36 @@ class OverlayService : Service(), OverlayHost {
     private var pillOverlay: AdCounterOverlay? = null
     private var summaryCard: SessionSummaryCard? = null
 
+    private var scrollMaskManager: ScrollMaskManager? = null
+
+    fun setScrollMaskManager(m: ScrollMaskManager) { scrollMaskManager = m }
+
     private val lifecycleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
-            val pkg = intent.getStringExtra("pkg") ?: return
             when (action) {
-                ACTION_APP_FOREGROUND -> {
-                    manager.onAppForeground(pkg)
-                    showPill()
+                ACTION_CHILD_HARD_STOP -> {
+                    scrollMaskManager?.onHardStop()
                 }
-                ACTION_APP_BACKGROUND -> {
-                    val finalState = manager.uiState.value
-                    showSummary(finalState)
-                    showSurvey { rating ->
-                        if (rating != null) manager.recordSatisfaction(rating)
+                else -> {
+                    val pkg = intent.getStringExtra("pkg") ?: return
+                    when (action) {
+                        ACTION_APP_FOREGROUND -> {
+                            manager.onAppForeground(pkg)
+                            showPill()
+                            scrollMaskManager?.onSessionStart(pkg)
+                        }
+                        ACTION_APP_BACKGROUND -> {
+                            scrollMaskManager?.onSessionEnd()
+                            val finalState = manager.uiState.value
+                            showSummary(finalState)
+                            showSurvey { rating ->
+                                if (rating != null) manager.recordSatisfaction(rating)
+                            }
+                            manager.onAppBackground()
+                            hidePill()
+                        }
                     }
-                    manager.onAppBackground()
-                    hidePill()
                 }
             }
         }
@@ -139,6 +155,7 @@ class OverlayService : Service(), OverlayHost {
         val filter = IntentFilter().apply {
             addAction(ACTION_APP_FOREGROUND)
             addAction(ACTION_APP_BACKGROUND)
+            addAction(ACTION_CHILD_HARD_STOP)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(lifecycleReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -218,7 +235,7 @@ class OverlayService : Service(), OverlayHost {
     }
 
     override fun showLoading() {
-        // Reserved for WI-09/10. No-op default.
+        // Delegated to ScrollMaskManager's LoadingOverlay via OverlayHost interface
     }
 
     override fun hideLoading() {
@@ -226,7 +243,19 @@ class OverlayService : Service(), OverlayHost {
     }
 
     override fun showSkipFlash() {
-        // Reserved for WI-09/10. No-op default.
+        if (hasView(KEY_SKIP_FLASH)) return
+        val flashView = View(this).apply {
+            setBackgroundColor(0xCC_000000.toInt())
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            android.graphics.PixelFormat.TRANSLUCENT
+        )
+        addView(flashView, params, KEY_SKIP_FLASH)
+        Handler(Looper.getMainLooper()).postDelayed({ removeView(KEY_SKIP_FLASH) }, 300L)
     }
 
     override fun addView(view: View, params: WindowManager.LayoutParams, key: String) {
