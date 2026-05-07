@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import com.scrollshield.data.model.Classification
 import com.scrollshield.data.model.TopicCategory
+import com.scrollshield.error.ErrorRecoveryManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,7 +20,8 @@ import javax.inject.Singleton
 
 @Singleton
 class VisualClassifier @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val errorRecoveryManager: ErrorRecoveryManager
 ) {
     data class VisualResult(
         val classification: Classification,
@@ -50,20 +52,28 @@ class VisualClassifier @Inject constructor(
     private var interpreter: Interpreter? = null
 
     @Synchronized
-    private fun getInterpreter(): Interpreter {
+    private fun getInterpreter(): Interpreter? {
         interpreter?.let { return it }
-        val model = loadModelFile()
-        val options = Interpreter.Options()
-        try {
-            val nnApiDelegate = NnApiDelegate()
-            options.addDelegate(nnApiDelegate)
-        } catch (_: Exception) {
-            options.setUseXNNPACK(true)
+        val startTime = System.currentTimeMillis()
+        return try {
+            val model = loadModelFile()
+            val options = Interpreter.Options()
+            try {
+                val nnApiDelegate = NnApiDelegate()
+                options.addDelegate(nnApiDelegate)
+            } catch (_: Exception) {
+                options.setUseXNNPACK(true)
+            }
+            options.setNumThreads(2)
+            val interp = Interpreter(model, options)
+            interpreter = interp
+            val loadTimeMs = System.currentTimeMillis() - startTime
+            errorRecoveryManager.onVisualModelLoaded(loadTimeMs)
+            interp
+        } catch (e: Exception) {
+            errorRecoveryManager.onVisualModelLoadFailed(e.message ?: "unknown error")
+            null
         }
-        options.setNumThreads(2)
-        val interp = Interpreter(model, options)
-        interpreter = interp
-        return interp
     }
 
     private fun loadModelFile(): MappedByteBuffer {
@@ -75,7 +85,7 @@ class VisualClassifier @Inject constructor(
 
     suspend fun classify(bitmap: Bitmap): VisualResult? = withContext(Dispatchers.Default) {
         try {
-            val interp = getInterpreter()
+            val interp = getInterpreter() ?: return@withContext null
             val preprocessed = preprocess(bitmap)
             val inputBuffer = bitmapToByteBuffer(preprocessed)
             if (preprocessed != bitmap) preprocessed.recycle()

@@ -11,12 +11,14 @@ import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 import com.scrollshield.classification.ScreenCaptureManager
+import com.scrollshield.error.ErrorRecoveryManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 
 class MediaProjectionHolder(
     @ApplicationContext private val context: Context,
     private val mediaProjectionManager: MediaProjectionManager,
-    private val screenCaptureManager: ScreenCaptureManager
+    private val screenCaptureManager: ScreenCaptureManager,
+    private val errorRecoveryManager: ErrorRecoveryManager? = null
 ) {
     private var mediaProjection: MediaProjection? = null
 
@@ -40,6 +42,7 @@ class MediaProjectionHolder(
         override fun onStop() {
             mediaProjection = null
             screenCaptureManager.stop()
+            errorRecoveryManager?.onMediaProjectionRevoked()
         }
     }
 
@@ -59,6 +62,7 @@ class MediaProjectionHolder(
         mediaProjection = projection
         persistIntent(data, resultCode)
         screenCaptureManager.start(projection)
+        errorRecoveryManager?.onMediaProjectionGranted()
     }
 
     fun getMediaProjection(): MediaProjection? = mediaProjection

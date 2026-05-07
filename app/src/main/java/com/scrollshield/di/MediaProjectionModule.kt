@@ -3,6 +3,8 @@ package com.scrollshield.di
 import android.content.Context
 import android.media.projection.MediaProjectionManager
 import com.scrollshield.classification.ScreenCaptureManager
+import com.scrollshield.error.DiagnosticLogger
+import com.scrollshield.error.ErrorRecoveryManager
 import com.scrollshield.service.MediaProjectionHolder
 import dagger.Module
 import dagger.Provides
@@ -24,14 +26,17 @@ object MediaProjectionModule {
     @Singleton
     fun provideScreenCaptureManager(
         @ApplicationContext context: Context,
-        mediaProjectionManager: MediaProjectionManager
-    ): ScreenCaptureManager = ScreenCaptureManager(context, mediaProjectionManager)
+        mediaProjectionManager: MediaProjectionManager,
+        errorRecoveryManager: ErrorRecoveryManager,
+        diagnosticLogger: DiagnosticLogger
+    ): ScreenCaptureManager = ScreenCaptureManager(context, mediaProjectionManager, errorRecoveryManager, diagnosticLogger)
 
     @Provides
     @Singleton
     fun provideMediaProjectionHolder(
         @ApplicationContext context: Context,
         mediaProjectionManager: MediaProjectionManager,
-        screenCaptureManager: ScreenCaptureManager
-    ): MediaProjectionHolder = MediaProjectionHolder(context, mediaProjectionManager, screenCaptureManager)
+        screenCaptureManager: ScreenCaptureManager,
+        errorRecoveryManager: ErrorRecoveryManager
+    ): MediaProjectionHolder = MediaProjectionHolder(context, mediaProjectionManager, screenCaptureManager, errorRecoveryManager)
 }

@@ -24,6 +24,8 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.scrollshield.classification.ScreenCaptureManager
+import com.scrollshield.error.DiagnosticLogger
+import com.scrollshield.error.ErrorRecoveryManager
 import com.scrollshield.compat.AppCompatLayer
 import com.scrollshield.compat.InstagramCompat
 import com.scrollshield.compat.TikTokCompat
@@ -65,6 +67,9 @@ class FeedInterceptionService : AccessibilityService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val mainHandler  = Handler(Looper.getMainLooper())
 
+    private var errorRecoveryManager: ErrorRecoveryManager? = null
+    private var diagnosticLogger: DiagnosticLogger? = null
+
     private var overlayServiceBound = false
     private val overlayServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -90,7 +95,9 @@ class FeedInterceptionService : AccessibilityService() {
                 screenCaptureManager = screenCaptureManager,
                 classificationPipeline = pipeline,
                 profileManager = overlayService.profileManager,
-                overlayHost = overlayHost
+                overlayHost = overlayHost,
+                errorRecoveryManager = errorRecoveryManager,
+                diagnosticLogger = diagnosticLogger
             )
             maskManager.initialize(overlayService.sessionDao)
             overlayService.setScrollMaskManager(maskManager)
@@ -126,6 +133,20 @@ class FeedInterceptionService : AccessibilityService() {
 
     override fun onServiceConnected() {
         createNotificationChannel()
+
+        val entryPoint = EntryPointAccessors.fromApplication(
+            applicationContext, ClassificationPipelineEntryPoint::class.java
+        )
+        errorRecoveryManager = entryPoint.errorRecoveryManager()
+        diagnosticLogger = entryPoint.diagnosticLogger()
+
+        diagnosticLogger?.log(
+            DiagnosticLogger.DiagnosticEvent.ServiceConnected(System.currentTimeMillis())
+        )
+        if (errorRecoveryManager?.onServiceReconnected() == true) {
+            sendBroadcast(Intent("com.scrollshield.SCAN_MAP_INVALID"))
+        }
+
         val overlayIntent = Intent(this, OverlayService::class.java)
         startService(overlayIntent)
         bindService(overlayIntent, overlayServiceConnection, Context.BIND_AUTO_CREATE)
@@ -137,6 +158,11 @@ class FeedInterceptionService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        errorRecoveryManager?.onServiceDisconnected()
+        diagnosticLogger?.log(
+            DiagnosticLogger.DiagnosticEvent.ServiceDisconnected(System.currentTimeMillis())
+        )
+        diagnosticLogger?.logSessionSummary()
         if (overlayServiceBound) {
             try { unbindService(overlayServiceConnection) } catch (_: Exception) {}
             overlayServiceBound = false
@@ -342,7 +368,9 @@ class FeedInterceptionService : AccessibilityService() {
         }
 
     fun scrollForward(): Job = serviceScope.launch {
+        if (errorRecoveryManager?.isGestureDisabledForSession() == true) return@launch
         val ok = dispatchSwipe(upward = true, durationMs = SWIPE_FORWARD_DURATION)
+        errorRecoveryManager?.onGestureResult(ok, feedPosition)
         if (ok) {
             feedPosition++
             rootInActiveWindow?.let { r -> lastValidatedHash = fingerprintOf(r); r.recycle() }
@@ -350,7 +378,9 @@ class FeedInterceptionService : AccessibilityService() {
     }
 
     fun scrollBackward(): Job = serviceScope.launch {
+        if (errorRecoveryManager?.isGestureDisabledForSession() == true) return@launch
         val ok = dispatchSwipe(upward = false, durationMs = SWIPE_FORWARD_DURATION)
+        errorRecoveryManager?.onGestureResult(ok, feedPosition)
         if (ok) {
             feedPosition = maxOf(0, feedPosition - 1)
             rootInActiveWindow?.let { r -> lastValidatedHash = fingerprintOf(r); r.recycle() }
@@ -359,14 +389,18 @@ class FeedInterceptionService : AccessibilityService() {
 
     fun scrollForwardFast(n: Int): Job = serviceScope.launch {
         repeat(n) { i ->
+            if (errorRecoveryManager?.isGestureDisabledForSession() == true) return@launch
             var ok = dispatchSwipe(upward = true, durationMs = SWIPE_FAST_DURATION)
             if (!ok) {
+                errorRecoveryManager?.onGestureResult(false, feedPosition)
                 ok = dispatchSwipe(upward = true, durationMs = SWIPE_FAST_DURATION)
                 if (!ok) {
+                    errorRecoveryManager?.onGestureResult(false, feedPosition)
                     sendBroadcast(Intent("com.scrollshield.FALLBACK_LIVE_CLASSIFICATION"))
                     return@launch
                 }
             }
+            errorRecoveryManager?.onGestureResult(true, feedPosition)
             feedPosition++
             rootInActiveWindow?.let { r -> lastValidatedHash = fingerprintOf(r); r.recycle() }
             if (i < n - 1) delay(SWIPE_FAST_PAUSE)
@@ -375,14 +409,18 @@ class FeedInterceptionService : AccessibilityService() {
 
     fun scrollBackwardFast(n: Int): Job = serviceScope.launch {
         repeat(n) { i ->
+            if (errorRecoveryManager?.isGestureDisabledForSession() == true) return@launch
             var ok = dispatchSwipe(upward = false, durationMs = SWIPE_FAST_DURATION)
             if (!ok) {
+                errorRecoveryManager?.onGestureResult(false, feedPosition)
                 ok = dispatchSwipe(upward = false, durationMs = SWIPE_FAST_DURATION)
                 if (!ok) {
+                    errorRecoveryManager?.onGestureResult(false, feedPosition)
                     sendBroadcast(Intent("com.scrollshield.FALLBACK_LIVE_CLASSIFICATION"))
                     return@launch
                 }
             }
+            errorRecoveryManager?.onGestureResult(true, feedPosition)
             feedPosition = maxOf(0, feedPosition - 1)
             rootInActiveWindow?.let { r -> lastValidatedHash = fingerprintOf(r); r.recycle() }
             if (i < n - 1) delay(SWIPE_FAST_PAUSE)

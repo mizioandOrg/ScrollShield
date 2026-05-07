@@ -14,6 +14,8 @@ import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.view.WindowInsets
 import android.view.WindowManager
+import com.scrollshield.error.DiagnosticLogger
+import com.scrollshield.error.ErrorRecoveryManager
 import com.scrollshield.service.ScreenCaptureService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +24,9 @@ import kotlinx.coroutines.withContext
 
 class ScreenCaptureManager(
     @ApplicationContext private val context: Context,
-    private val mediaProjectionManager: MediaProjectionManager
+    private val mediaProjectionManager: MediaProjectionManager,
+    private val errorRecoveryManager: ErrorRecoveryManager? = null,
+    private val diagnosticLogger: DiagnosticLogger? = null
 ) {
     private var mediaProjection: MediaProjection? = null
     private var imageReader: ImageReader? = null
@@ -34,9 +38,16 @@ class ScreenCaptureManager(
 
     val isAvailable: Boolean get() = mediaProjection != null && imageReader != null
 
+    private val revocationCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            errorRecoveryManager?.onMediaProjectionRevoked()
+        }
+    }
+
     fun start(mediaProjection: MediaProjection) {
         stop() // clean up any prior state
         this.mediaProjection = mediaProjection
+        mediaProjection.registerCallback(revocationCallback, null)
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val bounds = wm.currentWindowMetrics.bounds
@@ -65,6 +76,7 @@ class ScreenCaptureManager(
             )
         } catch (e: SecurityException) {
             android.util.Log.e("SCM", "createVirtualDisplay denied", e)
+            errorRecoveryManager?.onMediaProjectionRevoked()
             reader.close()
             imageReader = null
             this.mediaProjection = null
@@ -92,16 +104,35 @@ class ScreenCaptureManager(
     }
 
     suspend fun captureFrame(): Bitmap? = withContext(Dispatchers.IO) {
-        val reader = imageReader ?: return@withContext null
-        var image = try { reader.acquireLatestImage() } catch (_: Exception) { return@withContext null }
+        val captureStart = System.currentTimeMillis()
+        val reader = imageReader ?: run {
+            diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.FrameCaptureFailed("no imageReader"))
+            diagnosticLogger?.incrementFrameCaptureFail()
+            return@withContext null
+        }
+        var image = try { reader.acquireLatestImage() } catch (_: Exception) {
+            diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.FrameCaptureFailed("acquireLatestImage exception"))
+            diagnosticLogger?.incrementFrameCaptureFail()
+            return@withContext null
+        }
         if (image == null) {
             delay(50)
-            image = try { reader.acquireLatestImage() } catch (_: Exception) { return@withContext null }
-                ?: return@withContext null
+            image = try { reader.acquireLatestImage() } catch (_: Exception) {
+                diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.FrameCaptureFailed("acquireLatestImage retry exception"))
+                diagnosticLogger?.incrementFrameCaptureFail()
+                return@withContext null
+            }
+            if (image == null) {
+                diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.FrameCaptureFailed("acquireLatestImage returned null after retry"))
+                diagnosticLogger?.incrementFrameCaptureFail()
+                return@withContext null
+            }
         }
         try {
             val nowNs = SystemClock.elapsedRealtimeNanos()
             if (nowNs - image.timestamp > 200_000_000L) {
+                diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.FrameCaptureFailed("stale frame"))
+                diagnosticLogger?.incrementFrameCaptureFail()
                 return@withContext null
             }
             val plane = image.planes[0]
@@ -116,9 +147,15 @@ class ScreenCaptureManager(
                 val cropTop = statusBarHeight
                 val cropHeight = image.height - statusBarHeight - navBarHeight
                 if (cropHeight <= 0 || cropTop + cropHeight > fullBitmap.height) {
+                    diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.FrameCaptureFailed("invalid crop dimensions"))
+                    diagnosticLogger?.incrementFrameCaptureFail()
                     return@withContext null
                 }
-                Bitmap.createBitmap(fullBitmap, 0, cropTop, image.width.coerceAtMost(fullBitmap.width), cropHeight)
+                val result = Bitmap.createBitmap(fullBitmap, 0, cropTop, image.width.coerceAtMost(fullBitmap.width), cropHeight)
+                val captureTimeMs = System.currentTimeMillis() - captureStart
+                diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.FrameCaptureSuccess(captureTimeMs))
+                diagnosticLogger?.incrementFrameCaptureSuccess()
+                result
             } finally {
                 fullBitmap.recycle()
             }

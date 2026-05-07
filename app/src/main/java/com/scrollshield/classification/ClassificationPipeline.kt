@@ -9,6 +9,8 @@ import com.scrollshield.data.model.FeedItem
 import com.scrollshield.data.model.SkipDecision
 import com.scrollshield.data.model.TopicCategory
 import com.scrollshield.data.model.UserProfile
+import com.scrollshield.error.DiagnosticLogger
+import com.scrollshield.error.ErrorRecoveryManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,7 +22,9 @@ class ClassificationPipeline @Inject constructor(
     private val labelDetector: LabelDetector,
     private val visualClassifier: VisualClassifier,
     private val contentClassifier: ContentClassifier,
-    private val skipDecisionEngine: SkipDecisionEngine
+    private val skipDecisionEngine: SkipDecisionEngine,
+    private val errorRecoveryManager: ErrorRecoveryManager,
+    private val diagnosticLogger: DiagnosticLogger
 ) {
     suspend fun classify(feedItem: FeedItem, profile: UserProfile): ClassifiedItem {
         val startTime = System.currentTimeMillis()
@@ -49,6 +53,20 @@ class ClassificationPipeline @Inject constructor(
 
             // If thermal throttled, skip Tier 1 and Tier 2
             if (thermalThrottled) {
+                diagnosticLogger.incrementTier0Classification()
+                return buildClassifiedItem(
+                    feedItem, Classification.UNKNOWN, 0.0f,
+                    FloatArray(20), TopicCategory.fromIndex(0), tier = 0,
+                    startTime, profile
+                )
+            }
+
+            val skipVisual = errorRecoveryManager.shouldSkipVisualClassification()
+            val skipText = errorRecoveryManager.shouldSkipTextClassification()
+
+            // If both models unavailable, return UNKNOWN at Tier 0
+            if (skipVisual && skipText) {
+                diagnosticLogger.incrementTier0Classification()
                 return buildClassifiedItem(
                     feedItem, Classification.UNKNOWN, 0.0f,
                     FloatArray(20), TopicCategory.fromIndex(0), tier = 0,
@@ -57,9 +75,10 @@ class ClassificationPipeline @Inject constructor(
             }
 
             // Tier 1 — visual classification (PRIMARY)
-            if (feedItem.screenCapture != null) {
+            if (!skipVisual && feedItem.screenCapture != null) {
                 val t1 = visualClassifier.classify(feedItem.screenCapture)
                 if (t1 != null && t1.confidence >= 0.7f) {
+                    diagnosticLogger.incrementVisualClassification()
                     return buildClassifiedItem(
                         feedItem, t1.classification, t1.confidence,
                         t1.topicVector, t1.topicCategory, tier = 1,
@@ -69,10 +88,21 @@ class ClassificationPipeline @Inject constructor(
             }
 
             // Tier 2 — deep text (supplementary fallback)
-            val t2 = contentClassifier.classify(feedItem)
+            if (!skipText) {
+                val t2 = contentClassifier.classify(feedItem)
+                diagnosticLogger.incrementTextClassification()
+                return buildClassifiedItem(
+                    feedItem, t2.classification, t2.confidence,
+                    t2.topicVector, t2.topicCategory, tier = 2,
+                    startTime, profile
+                )
+            }
+
+            // Visual succeeded partially but text is skipped — return UNKNOWN
+            diagnosticLogger.incrementTier0Classification()
             return buildClassifiedItem(
-                feedItem, t2.classification, t2.confidence,
-                t2.topicVector, t2.topicCategory, tier = 2,
+                feedItem, Classification.UNKNOWN, 0.0f,
+                FloatArray(20), TopicCategory.fromIndex(0), tier = 0,
                 startTime, profile
             )
         } catch (_: Exception) {

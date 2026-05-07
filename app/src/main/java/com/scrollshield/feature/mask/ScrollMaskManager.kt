@@ -13,6 +13,8 @@ import com.scrollshield.data.db.SessionDao
 import com.scrollshield.data.model.ClassifiedItem
 import com.scrollshield.data.model.SkipDecision
 import com.scrollshield.data.model.UserProfile
+import com.scrollshield.error.DiagnosticLogger
+import com.scrollshield.error.ErrorRecoveryManager
 import com.scrollshield.feature.counter.AdCounterManager
 import com.scrollshield.profile.ProfileManager
 import com.scrollshield.service.FeedInterceptionService
@@ -44,7 +46,9 @@ class ScrollMaskManager(
     private val screenCaptureManager: ScreenCaptureManager,
     private val classificationPipeline: ClassificationPipeline,
     private val profileManager: ProfileManager,
-    private val overlayHost: OverlayHost
+    private val overlayHost: OverlayHost,
+    private val errorRecoveryManager: ErrorRecoveryManager? = null,
+    private val diagnosticLogger: DiagnosticLogger? = null
 ) {
 
     companion object {
@@ -107,7 +111,8 @@ class ScrollMaskManager(
      */
     fun initialize(sessionDao: SessionDao) {
         preScanController = PreScanController(
-            context, feedInterceptionService, screenCaptureManager, classificationPipeline
+            context, feedInterceptionService, screenCaptureManager, classificationPipeline,
+            diagnosticLogger
         )
 
         skipFlashOverlay = SkipFlashOverlay(context)
@@ -139,6 +144,8 @@ class ScrollMaskManager(
             "onSessionStart must be called on the main thread"
         }
 
+        errorRecoveryManager?.resetSession()
+
         val profile = getActiveProfileSync()
         Log.d(TAG, "onSessionStart: app=$app profile=${profile?.id} maskEnabled=${profile?.maskEnabled}")
         profile ?: return
@@ -167,6 +174,19 @@ class ScrollMaskManager(
 
             val result = ctrl.runPreScan(map, profile) { current, total ->
                 loadingOverlay?.updateProgress(current, total)
+            }
+
+            // Handle pre-scan timeout
+            if (result.timedOut) {
+                loadingOverlay?.updateStatusText("Pre-scan timed out \u2014 running in live mode")
+                loadingOverlay?.hide(overlayHost)
+                isPreScanning = false
+                _preScanStats.value = PreScanStats(
+                    itemsPreScanned = 0,
+                    preScanDurationMs = result.durationMs,
+                    status = PreScanStatus.COMPLETE
+                )
+                return@launch
             }
 
             // Publish classified items to AdCounterManager
@@ -207,6 +227,9 @@ class ScrollMaskManager(
     fun onUserScroll(position: Int) {
         // Ignore our own programmatic gestures (Criterion 7)
         if (feedInterceptionService.isOwnGesture) return
+
+        // Skip if gestures are disabled for this session
+        if (errorRecoveryManager?.isGestureDisabledForSession() == true) return
 
         scope.launch {
             val map = scanMap ?: return@launch

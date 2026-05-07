@@ -21,12 +21,14 @@ import androidx.room.Room
 import com.scrollshield.data.db.ScrollShieldDatabase
 import com.scrollshield.data.db.SessionDao
 import com.scrollshield.data.preferences.UserPreferencesStore
+import com.scrollshield.error.ErrorRecoveryManager
 import com.scrollshield.feature.counter.AdCounterManager
 import com.scrollshield.feature.counter.AdCounterOverlay
 import com.scrollshield.feature.counter.BudgetState
 import com.scrollshield.feature.counter.SessionSummaryCard
 import com.scrollshield.feature.mask.ScrollMaskManager
 import com.scrollshield.profile.ProfileManager
+import dagger.hilt.android.EntryPointAccessors
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.CoroutineScope
@@ -202,7 +204,12 @@ class OverlayService : Service(), OverlayHost {
 
     override fun showPill() {
         if (pillOverlay == null) {
-            pillOverlay = AdCounterOverlay(this, manager) { /* onTap */
+            val erm = try {
+                EntryPointAccessors.fromApplication(
+                    applicationContext, ClassificationPipelineEntryPoint::class.java
+                ).errorRecoveryManager()
+            } catch (_: Exception) { null }
+            pillOverlay = AdCounterOverlay(this, manager, erm) { /* onTap */
                 showSummary(manager.uiState.value)
             }
         }

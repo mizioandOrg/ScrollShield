@@ -9,8 +9,10 @@ import com.scrollshield.classification.ScreenCaptureManager
 import com.scrollshield.data.model.ClassifiedItem
 import com.scrollshield.data.model.FeedItem
 import com.scrollshield.data.model.UserProfile
+import com.scrollshield.error.DiagnosticLogger
 import com.scrollshield.service.FeedInterceptionService
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import java.security.MessageDigest
 
 /**
@@ -30,7 +32,8 @@ class PreScanController(
     private val context: Context,
     private val feedInterceptionService: FeedInterceptionService,
     private val screenCaptureManager: ScreenCaptureManager,
-    private val classificationPipeline: ClassificationPipeline
+    private val classificationPipeline: ClassificationPipeline,
+    private val diagnosticLogger: DiagnosticLogger? = null
 ) {
 
     companion object {
@@ -45,7 +48,8 @@ class PreScanController(
         val itemsScanned: Int,
         val durationMs: Long,
         val feedMutated: Boolean,
-        val earlyStop: Boolean
+        val earlyStop: Boolean,
+        val timedOut: Boolean = false
     )
 
     /**
@@ -60,64 +64,89 @@ class PreScanController(
         val startTime = System.currentTimeMillis()
         val bufferSize = effectiveBufferSize()
 
-        // Store start fingerprint for feed-mutation detection.
-        // FeedInterceptionService.lastValidatedHash is private, so we use the
-        // ScanMapRuntime's own validated hash as the feed-mutation anchor.
-        val startFingerprint = scanMap.lastValidatedHash
+        diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.PreScanStarted(bufferSize))
 
-        var itemsScanned = 0
-        var earlyStop = false
+        val innerResult = withTimeoutOrNull(15_000L) {
+            // Store start fingerprint for feed-mutation detection.
+            // FeedInterceptionService.lastValidatedHash is private, so we use the
+            // ScanMapRuntime's own validated hash as the feed-mutation anchor.
+            val startFingerprint = scanMap.lastValidatedHash
 
-        for (i in 0 until bufferSize) {
-            // Scroll forward one position
-            feedInterceptionService.scrollForwardFast(1).join()
+            var itemsScanned = 0
+            var earlyStop = false
 
-            // Let the UI settle before capturing
-            delay(FRAME_CAPTURE_SETTLE_MS)
+            for (i in 0 until bufferSize) {
+                // Scroll forward one position
+                feedInterceptionService.scrollForwardFast(1).join()
 
-            // Capture frame
-            val frame: Bitmap? = screenCaptureManager.captureFrame()
+                // Let the UI settle before capturing
+                delay(FRAME_CAPTURE_SETTLE_MS)
 
-            // Build a FeedItem from the captured data
-            val feedItem = buildFeedItem(
-                app = scanMap.app,
-                position = i,
-                capture = frame
-            )
+                // Capture frame
+                val frame: Bitmap? = screenCaptureManager.captureFrame()
 
-            // Classify
-            val classifiedItem = classificationPipeline.classify(feedItem, profile)
+                // Build a FeedItem from the captured data
+                val feedItem = buildFeedItem(
+                    app = scanMap.app,
+                    position = i,
+                    capture = frame
+                )
 
-            // Duplicate detection → early stop
-            if (scanMap.isDuplicate(classifiedItem)) {
-                earlyStop = true
-                itemsScanned = i
-                break
+                // Classify
+                val classifiedItem = classificationPipeline.classify(feedItem, profile)
+
+                // Duplicate detection → early stop
+                if (scanMap.isDuplicate(classifiedItem)) {
+                    earlyStop = true
+                    itemsScanned = i
+                    break
+                }
+
+                // Add to scan map
+                scanMap.addItem(i, classifiedItem)
+                itemsScanned = i + 1
+                onProgress(itemsScanned, bufferSize)
             }
 
-            // Add to scan map
-            scanMap.addItem(i, classifiedItem)
-            itemsScanned = i + 1
-            onProgress(itemsScanned, bufferSize)
+            // Rewind to original position
+            if (itemsScanned > 0) {
+                feedInterceptionService.scrollBackwardFast(itemsScanned).join()
+            }
+
+            // Compare fingerprints for feed mutation detection
+            val endFingerprint = scanMap.lastValidatedHash
+            val feedMutated = startFingerprint != null &&
+                endFingerprint != null &&
+                startFingerprint != endFingerprint
+
+            val durationMs = System.currentTimeMillis() - startTime
+            PreScanResult(
+                itemsScanned = itemsScanned,
+                durationMs = durationMs,
+                feedMutated = feedMutated,
+                earlyStop = earlyStop
+            )
         }
 
-        // Rewind to original position
-        if (itemsScanned > 0) {
-            feedInterceptionService.scrollBackwardFast(itemsScanned).join()
+        if (innerResult != null) {
+            diagnosticLogger?.log(
+                DiagnosticLogger.DiagnosticEvent.PreScanCompleted(
+                    innerResult.itemsScanned,
+                    innerResult.durationMs
+                )
+            )
+            return innerResult
         }
 
-        // Compare fingerprints for feed mutation detection
-        val endFingerprint = scanMap.lastValidatedHash
-        val feedMutated = startFingerprint != null &&
-            endFingerprint != null &&
-            startFingerprint != endFingerprint
-
-        val durationMs = System.currentTimeMillis() - startTime
+        // Timed out
+        val elapsedMs = System.currentTimeMillis() - startTime
+        diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.PreScanTimeout(elapsedMs))
         return PreScanResult(
-            itemsScanned = itemsScanned,
-            durationMs = durationMs,
-            feedMutated = feedMutated,
-            earlyStop = earlyStop
+            itemsScanned = 0,
+            durationMs = elapsedMs,
+            feedMutated = false,
+            earlyStop = false,
+            timedOut = true
         )
     }
 

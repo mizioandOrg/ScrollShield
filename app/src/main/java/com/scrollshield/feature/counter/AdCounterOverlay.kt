@@ -17,6 +17,7 @@ import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.scrollshield.error.ErrorRecoveryManager
 
 /**
  * Floating pill overlay. Pure view + render — no flow collection here.
@@ -26,6 +27,7 @@ import android.widget.TextView
 class AdCounterOverlay(
     private val context: Context,
     private val manager: AdCounterManager,
+    private val errorRecoveryManager: ErrorRecoveryManager? = null,
     private val onTap: (() -> Unit)? = null
 ) {
 
@@ -33,6 +35,7 @@ class AdCounterOverlay(
         context.getSharedPreferences(AdCounterManager.PREFS_OVERLAY, Context.MODE_PRIVATE)
 
     private val statusDot: View
+    private val warningIndicator: TextView
     private val adCount: TextView
     private val sep1: TextView
     private val revenue: TextView
@@ -76,6 +79,19 @@ class AdCounterOverlay(
             }
         }
 
+        warningIndicator = TextView(context).apply {
+            text = "\u26A0"
+            setTextColor(Color.parseColor("#FFC107"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                rightMargin = dp(4f).toInt()
+            }
+            visibility = View.GONE
+        }
+
         adCount = TextView(context).apply {
             setTextColor(Color.WHITE)
             setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
@@ -99,6 +115,7 @@ class AdCounterOverlay(
         }
 
         container.addView(statusDot)
+        container.addView(warningIndicator)
         container.addView(adCount)
         container.addView(sep1)
         container.addView(revenue)
@@ -158,6 +175,10 @@ class AdCounterOverlay(
         }
 
         applyBudgetState(state.bracket)
+
+        // Show/hide degradation warning indicator
+        val degraded = errorRecoveryManager?.isDegraded() == true
+        warningIndicator.visibility = if (degraded) View.VISIBLE else View.GONE
     }
 
     fun applyBudgetState(state: BudgetState) {
