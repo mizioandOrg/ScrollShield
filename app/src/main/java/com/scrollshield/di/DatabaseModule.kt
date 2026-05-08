@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.scrollshield.data.db.MonthlyAggregateDao
 import com.scrollshield.data.db.ProfileDao
 import com.scrollshield.data.db.ScrollShieldDatabase
 import com.scrollshield.data.db.SessionDao
@@ -50,7 +51,7 @@ object DatabaseModule {
         errorRecoveryManager: ErrorRecoveryManager
     ): ScrollShieldDatabase {
         return Room.databaseBuilder(context, ScrollShieldDatabase::class.java, dbName)
-            .fallbackToDestructiveMigration()
+            .addMigrations(ScrollShieldDatabase.MIGRATION_1_2)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onDestructiveMigration(db: SupportSQLiteDatabase) {
                     super.onDestructiveMigration(db)
@@ -78,4 +79,8 @@ object DatabaseModule {
     @Provides
     fun provideSignatureDao(database: ScrollShieldDatabase): SignatureDao =
         database.signatureDao()
+
+    @Provides
+    fun provideMonthlyAggregateDao(database: ScrollShieldDatabase): MonthlyAggregateDao =
+        database.monthlyAggregateDao()
 }

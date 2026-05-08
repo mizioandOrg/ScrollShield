@@ -1,9 +1,13 @@
 package com.scrollshield.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "sessions")
+@Entity(
+    tableName = "sessions",
+    indices = [Index(value = ["profileId", "startTime"], name = "idx_sessions_profile_starttime")]
+)
 data class SessionRecord(
     @PrimaryKey val id: String,
     val profileId: String,
