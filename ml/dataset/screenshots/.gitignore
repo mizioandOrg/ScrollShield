@@ -1,0 +1,6 @@
+# Don't commit raw screenshots — managed via DVC
+*.png
+*.jpg
+*.jpeg
+*.webp
+!.gitkeep
