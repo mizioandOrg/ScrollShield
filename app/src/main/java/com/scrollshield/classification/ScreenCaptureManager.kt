@@ -35,21 +35,22 @@ class ScreenCaptureManager(
     val isAvailable: Boolean get() = mediaProjection != null && imageReader != null
 
     /**
-     * Stage 1: store the projection and start ScreenCaptureService as a foreground
-     * service with type mediaProjection. The service calls initVirtualDisplay() in
-     * onStartCommand() AFTER startForeground(), satisfying the API 34+ requirement
-     * that createVirtualDisplay() is only called once the foreground service is active.
+     * Called after the consent dialog is accepted and ScreenCaptureService is already
+     * running as a foreground service with FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION.
+     * Does NOT stop the service — stopping it would invalidate the projection on API 34+.
+     * Calls initVirtualDisplay() directly because the service foreground state is already
+     * established by the caller (MainActivity pre-starts the service before the dialog).
      */
     fun start(mediaProjection: MediaProjection) {
-        stop()
+        // Release previous capture resources only; do NOT stop ScreenCaptureService.
+        try { virtualDisplay?.release() } catch (_: Exception) {}
+        virtualDisplay = null
+        try { imageReader?.close() } catch (_: Exception) {}
+        imageReader = null
+        try { this.mediaProjection?.stop() } catch (_: Exception) {}
         this.mediaProjection = mediaProjection
-        val svcIntent = Intent(context, ScreenCaptureService::class.java)
-            .setAction(ScreenCaptureService.ACTION_START)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(svcIntent)
-        } else {
-            context.startService(svcIntent)
-        }
+        // Service is already running (pre-started before consent dialog).
+        initVirtualDisplay()
     }
 
     /**
