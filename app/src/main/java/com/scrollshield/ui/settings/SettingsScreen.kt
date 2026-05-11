@@ -67,6 +67,7 @@ import com.scrollshield.data.model.UserProfile
 import com.scrollshield.data.preferences.UserPreferencesStore
 import com.scrollshield.profile.ProfileManager
 import com.scrollshield.profile.ProfileSwitcher
+import com.scrollshield.service.MediaProjectionHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -111,7 +112,8 @@ class SettingsViewModel @Inject constructor(
     private val profileManager: ProfileManager,
     private val profileSwitcher: ProfileSwitcher,
     private val preferencesStore: UserPreferencesStore,
-    private val database: ScrollShieldDatabase
+    private val database: ScrollShieldDatabase,
+    private val mediaProjectionHolder: MediaProjectionHolder
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsState())
@@ -308,6 +310,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesStore.setVisualClassificationEnabled(enabled)
             _state.update { it.copy(visualClassificationEnabled = enabled) }
+        }
+    }
+
+    fun grantScreenCapture(resultCode: Int, data: android.content.Intent) {
+        mediaProjectionHolder.setMediaProjection(resultCode, data)
+        viewModelScope.launch {
+            preferencesStore.setMediaProjectionGranted(true)
+            _state.update { it.copy(snackbarMessage = "Screen capture granted") }
         }
     }
 
@@ -687,8 +697,9 @@ fun SettingsScreen(
             val mediaProjectionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.StartActivityForResult()
             ) { result ->
-                if (result.resultCode == android.app.Activity.RESULT_OK) {
-                    viewModel.saveVisualClassification(true)
+                val data = result.data
+                if (result.resultCode == android.app.Activity.RESULT_OK && data != null) {
+                    viewModel.grantScreenCapture(result.resultCode, data)
                 }
             }
             OutlinedButton(
