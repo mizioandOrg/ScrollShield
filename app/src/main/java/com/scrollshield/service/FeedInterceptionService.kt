@@ -182,11 +182,11 @@ class FeedInterceptionService : AccessibilityService() {
         activePkg = targetPkg
         if (old != null && targetPkg == null) {
             android.util.Log.d("FIS", "APP_BACKGROUND: $old")
-            sendBroadcast(Intent(ACTION_APP_BACKGROUND).putExtra("pkg", old))
+            sendBroadcast(Intent(ACTION_APP_BACKGROUND).putExtra("pkg", old).setPackage(packageName))
         }
         if (targetPkg != null && old == null) {
             android.util.Log.d("FIS", "APP_FOREGROUND: $targetPkg")
-            sendBroadcast(Intent(ACTION_APP_FOREGROUND).putExtra("pkg", targetPkg))
+            sendBroadcast(Intent(ACTION_APP_FOREGROUND).putExtra("pkg", targetPkg).setPackage(packageName))
         }
     }
 
