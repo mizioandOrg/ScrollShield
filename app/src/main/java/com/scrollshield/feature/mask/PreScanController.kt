@@ -10,7 +10,9 @@ import com.scrollshield.data.model.ClassifiedItem
 import com.scrollshield.data.model.FeedItem
 import com.scrollshield.data.model.UserProfile
 import com.scrollshield.service.FeedInterceptionService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 
 /**
@@ -86,8 +88,10 @@ class PreScanController(
                 capture = frame
             )
 
-            // Classify
-            val classifiedItem = classificationPipeline.classify(feedItem, profile)
+            // Classify off the main thread to avoid blocking UI
+            val classifiedItem = withContext(Dispatchers.Default) {
+                classificationPipeline.classify(feedItem, profile)
+            }
 
             android.util.Log.d("PreScanController", "item $i: frame=${frame != null} skipDecision=${classifiedItem.skipDecision}")
 
