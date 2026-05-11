@@ -77,12 +77,11 @@ class FeedInterceptionService : AccessibilityService() {
             val overlayHost = overlayBinder.getHost()
             overlayServiceBound = true
 
-            val mpManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            val screenCaptureManager = ScreenCaptureManager(applicationContext, mpManager)
-
-            val pipeline = EntryPointAccessors.fromApplication(
+            val entryPoint = EntryPointAccessors.fromApplication(
                 applicationContext, ClassificationPipelineEntryPoint::class.java
-            ).classificationPipeline()
+            )
+            val screenCaptureManager = entryPoint.screenCaptureManager()
+            val pipeline = entryPoint.classificationPipeline()
 
             val maskManager = ScrollMaskManager(
                 context = applicationContext,
