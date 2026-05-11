@@ -1,26 +1,50 @@
 package com.scrollshield
 
+import android.media.projection.MediaProjectionManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.scrollshield.data.preferences.UserPreferencesStore
+import com.scrollshield.service.MediaProjectionHolder
 import com.scrollshield.ui.onboarding.OnboardingScreen
 import com.scrollshield.ui.settings.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    @Inject
-    lateinit var preferencesStore: UserPreferencesStore
+    @Inject lateinit var preferencesStore: UserPreferencesStore
+    @Inject lateinit var mediaProjectionHolder: MediaProjectionHolder
+
+    private val screenCaptureLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == RESULT_OK && data != null) {
+            mediaProjectionHolder.setMediaProjection(result.resultCode, data)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Re-request screen capture on every launch if previously granted.
+        // Android 14+ requires fresh consent per session; this avoids requiring
+        // the user to manually tap "Re-grant" in settings before each use.
+        val previouslyGranted = runBlocking { preferencesStore.mediaProjectionGranted.first() }
+        if (previouslyGranted) {
+            val mpManager = getSystemService(MediaProjectionManager::class.java)
+            screenCaptureLauncher.launch(mpManager.createScreenCaptureIntent())
+        }
+
         setContent {
             MaterialTheme {
                 Surface {
