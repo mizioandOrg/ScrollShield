@@ -36,11 +36,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Re-request screen capture on every launch if previously granted.
-        // Android 14+ requires fresh consent per session; this avoids requiring
-        // the user to manually tap "Re-grant" in settings before each use.
-        val previouslyGranted = runBlocking { preferencesStore.mediaProjectionGranted.first() }
-        if (previouslyGranted) {
+        // Request screen capture on every launch after onboarding.
+        // Android 14+ requires fresh consent per session; checking onboardingCompleted
+        // ensures we always prompt post-onboarding without waiting for a prior grant.
+        val onboardingCompleted = runBlocking { preferencesStore.onboardingCompleted.first() }
+        if (onboardingCompleted) {
             val mpManager = getSystemService(MediaProjectionManager::class.java)
             screenCaptureLauncher.launch(mpManager.createScreenCaptureIntent())
         }
