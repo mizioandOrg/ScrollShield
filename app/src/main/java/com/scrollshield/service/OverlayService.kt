@@ -104,6 +104,7 @@ class OverlayService : Service(), OverlayHost {
                     val pkg = intent.getStringExtra("pkg") ?: return
                     when (action) {
                         ACTION_APP_FOREGROUND -> {
+                            android.util.Log.d("OverlayService", "APP_FOREGROUND pkg=$pkg scrollMaskManager=$scrollMaskManager instance=${System.identityHashCode(this@OverlayService)}")
                             manager.onAppForeground(pkg)
                             showPill()
                             scrollMaskManager?.onSessionStart(pkg)
@@ -135,6 +136,7 @@ class OverlayService : Service(), OverlayHost {
 
     override fun onCreate() {
         super.onCreate()
+        android.util.Log.d("OverlayService", "onCreate: new instance hashCode=${System.identityHashCode(this)}")
 
         database = Room.databaseBuilder(
             applicationContext,
