@@ -59,6 +59,7 @@ class PreScanController(
     ): PreScanResult {
         val startTime = System.currentTimeMillis()
         val bufferSize = effectiveBufferSize()
+        android.util.Log.d("PreScanController", "runPreScan start: bufferSize=$bufferSize captureAvailable=${screenCaptureManager.isAvailable}")
 
         // Store start fingerprint for feed-mutation detection.
         // FeedInterceptionService.lastValidatedHash is private, so we use the
@@ -88,8 +89,11 @@ class PreScanController(
             // Classify
             val classifiedItem = classificationPipeline.classify(feedItem, profile)
 
+            android.util.Log.d("PreScanController", "item $i: frame=${frame != null} skipDecision=${classifiedItem.skipDecision}")
+
             // Duplicate detection → early stop
             if (scanMap.isDuplicate(classifiedItem)) {
+                android.util.Log.d("PreScanController", "earlyStop at i=$i (duplicate id=${classifiedItem.feedItem.id})")
                 earlyStop = true
                 itemsScanned = i
                 break
