@@ -9,14 +9,14 @@ plugins {
 
 android {
     namespace = "com.scrollshield"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.scrollshield"
         minSdk = 28
-        targetSdk = 34
-        versionCode = 11
-        versionName = "0.12.0-alpha"
+        targetSdk = 36
+        versionCode = 16
+        versionName = "0.12.5-bugfix"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -43,6 +43,12 @@ android {
         compose = true
     }
 
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+
 }
 
 dependencies {
@@ -61,8 +67,8 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    implementation("com.google.dagger:hilt-android:2.51.1")
-    ksp("com.google.dagger:hilt-android-compiler:2.51.1")
+    implementation("com.google.dagger:hilt-android:2.55")
+    ksp("com.google.dagger:hilt-android-compiler:2.55")
 
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")

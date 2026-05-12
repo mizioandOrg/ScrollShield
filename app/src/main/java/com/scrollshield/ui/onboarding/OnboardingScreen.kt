@@ -88,7 +88,8 @@ class OnboardingViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val profileManager: ProfileManager,
     private val profileSwitcher: ProfileSwitcher,
-    private val preferencesStore: UserPreferencesStore
+    private val preferencesStore: UserPreferencesStore,
+    private val mediaProjectionHolder: com.scrollshield.service.MediaProjectionHolder
 ) : ViewModel() {
 
     companion object {
@@ -211,6 +212,12 @@ class OnboardingViewModel @Inject constructor(
 
     fun setMediaProjectionDenied(denied: Boolean) {
         _state.update { it.copy(mediaProjectionDenied = denied) }
+    }
+
+    fun grantScreenCapture(resultCode: Int, data: android.content.Intent) {
+        mediaProjectionHolder.setMediaProjection(resultCode, data)
+        viewModelScope.launch { preferencesStore.setMediaProjectionGranted(true) }
+        setMediaProjectionGranted(true)
     }
 
     fun nextStep() {
@@ -380,7 +387,8 @@ fun OnboardingScreen(
                     onAccessibilityCheck = viewModel::setAccessibilityEnabled,
                     onOverlayCheck = viewModel::setOverlayEnabled,
                     onMediaProjectionGranted = viewModel::setMediaProjectionGranted,
-                    onMediaProjectionDenied = viewModel::setMediaProjectionDenied
+                    onMediaProjectionDenied = viewModel::setMediaProjectionDenied,
+                    onMediaProjectionResult = viewModel::grantScreenCapture
                 )
                 8 -> DoneStep()
             }
@@ -559,14 +567,17 @@ private fun PermissionsStep(
     onAccessibilityCheck: (Boolean) -> Unit,
     onOverlayCheck: (Boolean) -> Unit,
     onMediaProjectionGranted: (Boolean) -> Unit,
-    onMediaProjectionDenied: (Boolean) -> Unit
+    onMediaProjectionDenied: (Boolean) -> Unit,
+    onMediaProjectionResult: ((Int, android.content.Intent) -> Unit)? = null
 ) {
     val context = LocalContext.current
 
     val mediaProjectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
+        val data = result.data
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            onMediaProjectionResult?.invoke(result.resultCode, data)
             onMediaProjectionGranted(true)
         } else {
             onMediaProjectionDenied(true)

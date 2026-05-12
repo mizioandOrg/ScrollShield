@@ -10,7 +10,9 @@ import com.scrollshield.data.model.ClassifiedItem
 import com.scrollshield.data.model.FeedItem
 import com.scrollshield.data.model.UserProfile
 import com.scrollshield.service.FeedInterceptionService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 
 /**
@@ -59,6 +61,7 @@ class PreScanController(
     ): PreScanResult {
         val startTime = System.currentTimeMillis()
         val bufferSize = effectiveBufferSize()
+        android.util.Log.d("PreScanController", "runPreScan start: bufferSize=$bufferSize captureAvailable=${screenCaptureManager.isAvailable}")
 
         // Store start fingerprint for feed-mutation detection.
         // FeedInterceptionService.lastValidatedHash is private, so we use the
@@ -85,11 +88,16 @@ class PreScanController(
                 capture = frame
             )
 
-            // Classify
-            val classifiedItem = classificationPipeline.classify(feedItem, profile)
+            // Classify off the main thread to avoid blocking UI
+            val classifiedItem = withContext(Dispatchers.Default) {
+                classificationPipeline.classify(feedItem, profile)
+            }
+
+            android.util.Log.d("PreScanController", "item $i: frame=${frame != null} skipDecision=${classifiedItem.skipDecision}")
 
             // Duplicate detection → early stop
             if (scanMap.isDuplicate(classifiedItem)) {
+                android.util.Log.d("PreScanController", "earlyStop at i=$i (duplicate id=${classifiedItem.feedItem.id})")
                 earlyStop = true
                 itemsScanned = i
                 break

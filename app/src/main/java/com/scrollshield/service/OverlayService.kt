@@ -58,8 +58,8 @@ import kotlinx.coroutines.launch
 class OverlayService : Service(), OverlayHost {
 
     private lateinit var manager: AdCounterManager
-    private lateinit var profileManager: ProfileManager
-    private lateinit var sessionDao: SessionDao
+    internal lateinit var profileManager: ProfileManager
+    internal lateinit var sessionDao: SessionDao
     private lateinit var database: ScrollShieldDatabase
 
     companion object {
@@ -104,6 +104,7 @@ class OverlayService : Service(), OverlayHost {
                     val pkg = intent.getStringExtra("pkg") ?: return
                     when (action) {
                         ACTION_APP_FOREGROUND -> {
+                            android.util.Log.d("OverlayService", "APP_FOREGROUND pkg=$pkg scrollMaskManager=$scrollMaskManager instance=${System.identityHashCode(this@OverlayService)}")
                             manager.onAppForeground(pkg)
                             showPill()
                             scrollMaskManager?.onSessionStart(pkg)
@@ -135,6 +136,7 @@ class OverlayService : Service(), OverlayHost {
 
     override fun onCreate() {
         super.onCreate()
+        android.util.Log.d("OverlayService", "onCreate: new instance hashCode=${System.identityHashCode(this)}")
 
         database = Room.databaseBuilder(
             applicationContext,
@@ -184,7 +186,7 @@ class OverlayService : Service(), OverlayHost {
             stopSelf()
             return START_NOT_STICKY
         }
-        startForeground(NOTIF_ID, buildNotification())
+        startForeground(NOTIF_ID, buildNotification(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         return START_STICKY
     }
 

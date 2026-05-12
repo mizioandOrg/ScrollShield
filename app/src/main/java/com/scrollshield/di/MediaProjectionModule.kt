@@ -30,8 +30,7 @@ object MediaProjectionModule {
     @Provides
     @Singleton
     fun provideMediaProjectionHolder(
-        @ApplicationContext context: Context,
         mediaProjectionManager: MediaProjectionManager,
         screenCaptureManager: ScreenCaptureManager
-    ): MediaProjectionHolder = MediaProjectionHolder(context, mediaProjectionManager, screenCaptureManager)
+    ): MediaProjectionHolder = MediaProjectionHolder(mediaProjectionManager, screenCaptureManager)
 }

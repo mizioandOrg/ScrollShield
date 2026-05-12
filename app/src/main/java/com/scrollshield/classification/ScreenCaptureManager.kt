@@ -34,9 +34,32 @@ class ScreenCaptureManager(
 
     val isAvailable: Boolean get() = mediaProjection != null && imageReader != null
 
+    /**
+     * Called after the consent dialog is accepted and ScreenCaptureService is already
+     * running as a foreground service with FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION.
+     * Does NOT stop the service — stopping it would invalidate the projection on API 34+.
+     * Calls initVirtualDisplay() directly because the service foreground state is already
+     * established by the caller (MainActivity pre-starts the service before the dialog).
+     */
     fun start(mediaProjection: MediaProjection) {
-        stop() // clean up any prior state
+        // Release previous capture resources only; do NOT stop ScreenCaptureService.
+        try { virtualDisplay?.release() } catch (_: Exception) {}
+        virtualDisplay = null
+        try { imageReader?.close() } catch (_: Exception) {}
+        imageReader = null
+        try { this.mediaProjection?.stop() } catch (_: Exception) {}
         this.mediaProjection = mediaProjection
+        // Service is already running (pre-started before consent dialog).
+        initVirtualDisplay()
+    }
+
+    /**
+     * Stage 2: called by ScreenCaptureService after startForeground() to create
+     * the virtual display. Safe to call createVirtualDisplay() here because the
+     * foreground service of type mediaProjection is already active.
+     */
+    fun initVirtualDisplay() {
+        val projection = mediaProjection ?: return
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val bounds = wm.currentWindowMetrics.bounds
@@ -57,25 +80,18 @@ class ScreenCaptureManager(
         val reader = ImageReader.newInstance(displayWidth, displayHeight, PixelFormat.RGBA_8888, 2)
         imageReader = reader
         try {
-            virtualDisplay = mediaProjection.createVirtualDisplay(
+            virtualDisplay = projection.createVirtualDisplay(
                 "ScrollShieldCapture", displayWidth, displayHeight,
                 context.resources.displayMetrics.densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 reader.surface, null, null
             )
+            android.util.Log.d("SCM", "virtualDisplay created: ${displayWidth}x${displayHeight}")
         } catch (e: SecurityException) {
             android.util.Log.e("SCM", "createVirtualDisplay denied", e)
             reader.close()
             imageReader = null
             this.mediaProjection = null
-            return
-        }
-        val svcIntent = Intent(context, ScreenCaptureService::class.java)
-            .setAction(ScreenCaptureService.ACTION_START)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(svcIntent)
-        } else {
-            context.startService(svcIntent)
         }
     }
 

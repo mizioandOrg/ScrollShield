@@ -139,7 +139,9 @@ class ScrollMaskManager(
             "onSessionStart must be called on the main thread"
         }
 
-        val profile = getActiveProfileSync() ?: return
+        val profile = getActiveProfileSync()
+        Log.d(TAG, "onSessionStart: app=$app profile=${profile?.id} maskEnabled=${profile?.maskEnabled}")
+        profile ?: return
         if (!profile.maskEnabled) return
 
         // Create runtime scan map for this session
@@ -151,6 +153,7 @@ class ScrollMaskManager(
         // Create and show the loading overlay SYNCHRONOUSLY before launching coroutine
         loadingOverlay = LoadingOverlay(context, profile)
         val showMs = loadingOverlay!!.show(overlayHost)
+        Log.d(TAG, "LoadingOverlay shown in ${showMs}ms")
         if (showMs > LoadingOverlay.LATENCY_CONTRACT_MS) {
             Log.w(TAG, "LoadingOverlay.show() took ${showMs}ms, exceeds ${LoadingOverlay.LATENCY_CONTRACT_MS}ms contract")
         }
