@@ -69,15 +69,18 @@ class PreScanController(
 
         diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.PreScanStarted(bufferSize))
 
-        val innerResult = withTimeoutOrNull(15_000L) {
-            // Store start fingerprint for feed-mutation detection.
-            // FeedInterceptionService.lastValidatedHash is private, so we use the
-            // ScanMapRuntime's own validated hash as the feed-mutation anchor.
-            val startFingerprint = scanMap.lastValidatedHash
+        // Store start fingerprint for feed-mutation detection.
+        // FeedInterceptionService.lastValidatedHash is private, so we use the
+        // ScanMapRuntime's own validated hash as the feed-mutation anchor.
+        val startFingerprint = scanMap.lastValidatedHash
 
-            var itemsScanned = 0
-            var earlyStop = false
+        var itemsScanned = 0
+        var earlyStop = false
 
+        // Timeout caps only the forward/classify loop. The rewind below always
+        // runs so the feed returns to the user's start position even if the
+        // forward phase was cut short by the timeout.
+        val completed = withTimeoutOrNull(15_000L) {
             for (i in 0 until bufferSize) {
                 // Scroll forward one position
                 feedInterceptionService.scrollForwardFast(1).join()
@@ -115,46 +118,42 @@ class PreScanController(
                 itemsScanned = i + 1
                 onProgress(itemsScanned, bufferSize)
             }
+            true
+        }
 
-            // Rewind to original position
-            if (itemsScanned > 0) {
-                feedInterceptionService.scrollBackwardFast(itemsScanned).join()
-            }
+        // Rewind to original position — runs unconditionally so the feed
+        // always returns to where the user started, even on timeout.
+        if (itemsScanned > 0) {
+            feedInterceptionService.scrollBackwardFast(itemsScanned).join()
+        }
 
-            // Compare fingerprints for feed mutation detection
-            val endFingerprint = scanMap.lastValidatedHash
-            val feedMutated = startFingerprint != null &&
-                endFingerprint != null &&
-                startFingerprint != endFingerprint
+        // Compare fingerprints for feed mutation detection
+        val endFingerprint = scanMap.lastValidatedHash
+        val feedMutated = startFingerprint != null &&
+            endFingerprint != null &&
+            startFingerprint != endFingerprint
 
-            val durationMs = System.currentTimeMillis() - startTime
-            PreScanResult(
+        val durationMs = System.currentTimeMillis() - startTime
+
+        if (completed == null) {
+            diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.PreScanTimeout(durationMs))
+            return PreScanResult(
                 itemsScanned = itemsScanned,
                 durationMs = durationMs,
                 feedMutated = feedMutated,
-                earlyStop = earlyStop
+                earlyStop = earlyStop,
+                timedOut = true
             )
         }
 
-        if (innerResult != null) {
-            diagnosticLogger?.log(
-                DiagnosticLogger.DiagnosticEvent.PreScanCompleted(
-                    innerResult.itemsScanned,
-                    innerResult.durationMs
-                )
-            )
-            return innerResult
-        }
-
-        // Timed out
-        val elapsedMs = System.currentTimeMillis() - startTime
-        diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.PreScanTimeout(elapsedMs))
+        diagnosticLogger?.log(
+            DiagnosticLogger.DiagnosticEvent.PreScanCompleted(itemsScanned, durationMs)
+        )
         return PreScanResult(
-            itemsScanned = 0,
-            durationMs = elapsedMs,
-            feedMutated = false,
-            earlyStop = false,
-            timedOut = true
+            itemsScanned = itemsScanned,
+            durationMs = durationMs,
+            feedMutated = feedMutated,
+            earlyStop = earlyStop
         )
     }
 
