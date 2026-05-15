@@ -15,8 +15,8 @@ android {
         applicationId = "com.scrollshield"
         minSdk = 28
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.18.0-alpha"
+        versionCode = 22
+        versionName = "0.19.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -46,6 +46,12 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = false
+        }
+        resources {
+            excludes += setOf(
+                "META-INF/LICENSE.md",
+                "META-INF/LICENSE-notice.md",
+            )
         }
     }
 
