@@ -1,0 +1,26 @@
+{
+  "app": "com.google.android.youtube",
+  "version": "18.0.0",
+  "snapshots": [
+    {
+      "kind": "organic",
+      "nodes": [
+        {"id": "n1", "viewIdResourceName": "com.google.android.youtube:id/reel_channel_name", "text": "edu_channel"},
+        {"id": "n2", "viewIdResourceName": "com.google.android.youtube:id/reel_multi_format_title", "text": "today I learned about science"}
+      ],
+      "expectedCreator": "edu_channel",
+      "expectedCaption": "today I learned about science",
+      "expectedLabel": null
+    },
+    {
+      "kind": "sponsored",
+      "nodes": [
+        {"id": "n1", "viewIdResourceName": "com.google.android.youtube:id/reel_channel_name", "text": "promo_channel"},
+        {"id": "n2", "viewIdResourceName": "com.google.android.youtube:id/reel_multi_format_title", "text": "Promoted by BrandX get tech discount now"}
+      ],
+      "expectedCreator": "promo_channel",
+      "expectedCaption": "Promoted by BrandX get tech discount now",
+      "expectedLabel": null
+    }
+  ]
+}

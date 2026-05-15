@@ -1,0 +1,27 @@
+{
+  "app": "com.zhiliaoapp.musically",
+  "version": "32.0.0",
+  "snapshots": [
+    {
+      "kind": "organic",
+      "nodes": [
+        {"id": "n1", "viewIdResourceName": "com.zhiliaoapp.musically:id/title", "text": "dancer_dan"},
+        {"id": "n2", "viewIdResourceName": "com.zhiliaoapp.musically:id/desc", "text": "everyday music vibes for everyone #viral"}
+      ],
+      "expectedCreator": "dancer_dan",
+      "expectedCaption": "everyday music vibes for everyone #viral",
+      "expectedLabel": null
+    },
+    {
+      "kind": "sponsored",
+      "nodes": [
+        {"id": "n1", "viewIdResourceName": "com.zhiliaoapp.musically:id/title", "text": "shop_partner"},
+        {"id": "n2", "viewIdResourceName": "com.zhiliaoapp.musically:id/desc", "text": "Ad: limited time fashion offer"},
+        {"id": "n3", "viewIdResourceName": "com.zhiliaoapp.musically:id/ad_label", "text": "Ad"}
+      ],
+      "expectedCreator": "shop_partner",
+      "expectedCaption": "Ad: limited time fashion offer",
+      "expectedLabel": "Ad"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "app": "com.instagram.android",
+  "version": "300.0.0",
+  "snapshots": [
+    {
+      "kind": "organic",
+      "nodes": [
+        {"id": "n1", "viewIdResourceName": "com.instagram.android:id/reel_viewer_title", "text": "alice_creator"},
+        {"id": "n2", "viewIdResourceName": "com.instagram.android:id/reel_viewer_caption", "text": "loving this comedy content today #fyp"}
+      ],
+      "expectedCreator": "alice_creator",
+      "expectedCaption": "loving this comedy content today #fyp",
+      "expectedLabel": null
+    },
+    {
+      "kind": "sponsored",
+      "nodes": [
+        {"id": "n1", "viewIdResourceName": "com.instagram.android:id/reel_viewer_title", "text": "brandx_official"},
+        {"id": "n2", "viewIdResourceName": "com.instagram.android:id/reel_viewer_caption", "text": "Sponsored. Try our new tech product today"},
+        {"id": "n3", "viewIdResourceName": "com.instagram.android:id/sponsored_label", "text": "Sponsored"}
+      ],
+      "expectedCreator": "brandx_official",
+      "expectedCaption": "Sponsored. Try our new tech product today",
+      "expectedLabel": "Sponsored"
+    }
+  ]
+}
