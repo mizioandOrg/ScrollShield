@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -80,6 +81,7 @@ data class OnboardingState(
     val overlayEnabled: Boolean = false,
     val mediaProjectionGranted: Boolean = false,
     val mediaProjectionDenied: Boolean = false,
+    val notificationsGranted: Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU,
     val isComplete: Boolean = false
 )
 
@@ -212,6 +214,10 @@ class OnboardingViewModel @Inject constructor(
 
     fun setMediaProjectionDenied(denied: Boolean) {
         _state.update { it.copy(mediaProjectionDenied = denied) }
+    }
+
+    fun setNotificationsGranted(granted: Boolean) {
+        _state.update { it.copy(notificationsGranted = granted) }
     }
 
     fun grantScreenCapture(resultCode: Int, data: android.content.Intent) {
@@ -384,11 +390,13 @@ fun OnboardingScreen(
                     overlayEnabled = state.overlayEnabled,
                     mediaProjectionGranted = state.mediaProjectionGranted,
                     mediaProjectionDenied = state.mediaProjectionDenied,
+                    notificationsGranted = state.notificationsGranted,
                     onAccessibilityCheck = viewModel::setAccessibilityEnabled,
                     onOverlayCheck = viewModel::setOverlayEnabled,
                     onMediaProjectionGranted = viewModel::setMediaProjectionGranted,
                     onMediaProjectionDenied = viewModel::setMediaProjectionDenied,
-                    onMediaProjectionResult = viewModel::grantScreenCapture
+                    onMediaProjectionResult = viewModel::grantScreenCapture,
+                    onNotificationsGranted = viewModel::setNotificationsGranted
                 )
                 8 -> DoneStep()
             }
@@ -564,11 +572,13 @@ private fun PermissionsStep(
     overlayEnabled: Boolean,
     mediaProjectionGranted: Boolean,
     mediaProjectionDenied: Boolean,
+    notificationsGranted: Boolean,
     onAccessibilityCheck: (Boolean) -> Unit,
     onOverlayCheck: (Boolean) -> Unit,
     onMediaProjectionGranted: (Boolean) -> Unit,
     onMediaProjectionDenied: (Boolean) -> Unit,
-    onMediaProjectionResult: ((Int, android.content.Intent) -> Unit)? = null
+    onMediaProjectionResult: ((Int, android.content.Intent) -> Unit)? = null,
+    onNotificationsGranted: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -582,6 +592,12 @@ private fun PermissionsStep(
         } else {
             onMediaProjectionDenied(true)
         }
+    }
+
+    val notificationsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        onNotificationsGranted(granted)
     }
 
     Column(
@@ -725,6 +741,40 @@ private fun PermissionsStep(
                         mediaProjectionLauncher.launch(mpManager.createScreenCaptureIntent())
                     }) {
                         Text("Grant Screen Capture")
+                    }
+                }
+            }
+        }
+
+        // Notifications (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (notificationsGranted)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(text = "Notifications", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "Required to show alerts when scroll protection or visual classification is paused.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                    if (notificationsGranted) {
+                        Text(
+                            text = "Granted",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    } else {
+                        Button(onClick = {
+                            notificationsLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }) {
+                            Text("Grant Notifications")
+                        }
                     }
                 }
             }

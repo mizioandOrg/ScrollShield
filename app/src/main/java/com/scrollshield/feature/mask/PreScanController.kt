@@ -9,10 +9,12 @@ import com.scrollshield.classification.ScreenCaptureManager
 import com.scrollshield.data.model.ClassifiedItem
 import com.scrollshield.data.model.FeedItem
 import com.scrollshield.data.model.UserProfile
+import com.scrollshield.error.DiagnosticLogger
 import com.scrollshield.service.FeedInterceptionService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.security.MessageDigest
 
 /**
@@ -32,7 +34,8 @@ class PreScanController(
     private val context: Context,
     private val feedInterceptionService: FeedInterceptionService,
     private val screenCaptureManager: ScreenCaptureManager,
-    private val classificationPipeline: ClassificationPipeline
+    private val classificationPipeline: ClassificationPipeline,
+    private val diagnosticLogger: DiagnosticLogger? = null
 ) {
 
     companion object {
@@ -47,7 +50,8 @@ class PreScanController(
         val itemsScanned: Int,
         val durationMs: Long,
         val feedMutated: Boolean,
-        val earlyStop: Boolean
+        val earlyStop: Boolean,
+        val timedOut: Boolean = false
     )
 
     /**
@@ -63,6 +67,8 @@ class PreScanController(
         val bufferSize = effectiveBufferSize()
         android.util.Log.d("PreScanController", "runPreScan start: bufferSize=$bufferSize captureAvailable=${screenCaptureManager.isAvailable}")
 
+        diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.PreScanStarted(bufferSize))
+
         // Store start fingerprint for feed-mutation detection.
         // FeedInterceptionService.lastValidatedHash is private, so we use the
         // ScanMapRuntime's own validated hash as the feed-mutation anchor.
@@ -71,45 +77,52 @@ class PreScanController(
         var itemsScanned = 0
         var earlyStop = false
 
-        for (i in 0 until bufferSize) {
-            // Scroll forward one position
-            feedInterceptionService.scrollForwardFast(1).join()
+        // Timeout caps only the forward/classify loop. The rewind below always
+        // runs so the feed returns to the user's start position even if the
+        // forward phase was cut short by the timeout.
+        val completed = withTimeoutOrNull(15_000L) {
+            for (i in 0 until bufferSize) {
+                // Scroll forward one position
+                feedInterceptionService.scrollForwardFast(1).join()
 
-            // Let the UI settle before capturing
-            delay(FRAME_CAPTURE_SETTLE_MS)
+                // Let the UI settle before capturing
+                delay(FRAME_CAPTURE_SETTLE_MS)
 
-            // Capture frame
-            val frame: Bitmap? = screenCaptureManager.captureFrame()
+                // Capture frame
+                val frame: Bitmap? = screenCaptureManager.captureFrame()
 
-            // Build a FeedItem from the captured data
-            val feedItem = buildFeedItem(
-                app = scanMap.app,
-                position = i,
-                capture = frame
-            )
+                // Build a FeedItem from the captured data
+                val feedItem = buildFeedItem(
+                    app = scanMap.app,
+                    position = i,
+                    capture = frame
+                )
 
-            // Classify off the main thread to avoid blocking UI
-            val classifiedItem = withContext(Dispatchers.Default) {
-                classificationPipeline.classify(feedItem, profile)
+                // Classify off the main thread to avoid blocking UI
+                val classifiedItem = withContext(Dispatchers.Default) {
+                    classificationPipeline.classify(feedItem, profile)
+                }
+
+                android.util.Log.d("PreScanController", "item $i: frame=${frame != null} skipDecision=${classifiedItem.skipDecision}")
+
+                // Duplicate detection → early stop
+                if (scanMap.isDuplicate(classifiedItem)) {
+                    android.util.Log.d("PreScanController", "earlyStop at i=$i (duplicate id=${classifiedItem.feedItem.id})")
+                    earlyStop = true
+                    itemsScanned = i
+                    break
+                }
+
+                // Add to scan map
+                scanMap.addItem(i, classifiedItem)
+                itemsScanned = i + 1
+                onProgress(itemsScanned, bufferSize)
             }
-
-            android.util.Log.d("PreScanController", "item $i: frame=${frame != null} skipDecision=${classifiedItem.skipDecision}")
-
-            // Duplicate detection → early stop
-            if (scanMap.isDuplicate(classifiedItem)) {
-                android.util.Log.d("PreScanController", "earlyStop at i=$i (duplicate id=${classifiedItem.feedItem.id})")
-                earlyStop = true
-                itemsScanned = i
-                break
-            }
-
-            // Add to scan map
-            scanMap.addItem(i, classifiedItem)
-            itemsScanned = i + 1
-            onProgress(itemsScanned, bufferSize)
+            true
         }
 
-        // Rewind to original position
+        // Rewind to original position — runs unconditionally so the feed
+        // always returns to where the user started, even on timeout.
         if (itemsScanned > 0) {
             feedInterceptionService.scrollBackwardFast(itemsScanned).join()
         }
@@ -121,6 +134,21 @@ class PreScanController(
             startFingerprint != endFingerprint
 
         val durationMs = System.currentTimeMillis() - startTime
+
+        if (completed == null) {
+            diagnosticLogger?.log(DiagnosticLogger.DiagnosticEvent.PreScanTimeout(durationMs))
+            return PreScanResult(
+                itemsScanned = itemsScanned,
+                durationMs = durationMs,
+                feedMutated = feedMutated,
+                earlyStop = earlyStop,
+                timedOut = true
+            )
+        }
+
+        diagnosticLogger?.log(
+            DiagnosticLogger.DiagnosticEvent.PreScanCompleted(itemsScanned, durationMs)
+        )
         return PreScanResult(
             itemsScanned = itemsScanned,
             durationMs = durationMs,

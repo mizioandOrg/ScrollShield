@@ -4,6 +4,7 @@ import android.content.Context
 import com.scrollshield.data.model.Classification
 import com.scrollshield.data.model.FeedItem
 import com.scrollshield.data.model.TopicCategory
+import com.scrollshield.error.ErrorRecoveryManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,7 +21,8 @@ import javax.inject.Singleton
 
 @Singleton
 class ContentClassifier @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val errorRecoveryManager: ErrorRecoveryManager
 ) {
     data class ContentResult(
         val classification: Classification,
@@ -55,13 +57,21 @@ class ContentClassifier @Inject constructor(
     private var vocab: Map<String, Int>? = null
 
     @Synchronized
-    private fun getInterpreter(): Interpreter {
+    private fun getInterpreter(): Interpreter? {
         interpreter?.let { return it }
-        val model = loadModelFile()
-        val options = Interpreter.Options().apply { setNumThreads(2) }
-        val interp = Interpreter(model, options)
-        interpreter = interp
-        return interp
+        val startTime = System.currentTimeMillis()
+        return try {
+            val model = loadModelFile()
+            val options = Interpreter.Options().apply { setNumThreads(2) }
+            val interp = Interpreter(model, options)
+            interpreter = interp
+            val loadTimeMs = System.currentTimeMillis() - startTime
+            errorRecoveryManager.onTextModelLoaded(loadTimeMs)
+            interp
+        } catch (e: Exception) {
+            errorRecoveryManager.onTextModelLoadFailed(e.message ?: "unknown error")
+            null
+        }
     }
 
     @Synchronized
@@ -91,7 +101,12 @@ class ContentClassifier @Inject constructor(
 
     suspend fun classify(feedItem: FeedItem): ContentResult = withContext(Dispatchers.Default) {
         try {
-            val interp = getInterpreter()
+            val interp = getInterpreter() ?: return@withContext ContentResult(
+                classification = Classification.UNKNOWN,
+                confidence = 0.0f,
+                topicVector = FloatArray(NUM_TOPICS),
+                topicCategory = TopicCategory.fromIndex(0)
+            )
             val tokenIds = tokenize(feedItem.captionText)
 
             val inputIds = ByteBuffer.allocateDirect(MAX_TOKENS * 4).order(ByteOrder.nativeOrder())

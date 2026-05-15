@@ -5,10 +5,12 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.util.Log
 import com.scrollshield.classification.ScreenCaptureManager
+import com.scrollshield.error.ErrorRecoveryManager
 
 class MediaProjectionHolder(
     private val mediaProjectionManager: MediaProjectionManager,
-    private val screenCaptureManager: ScreenCaptureManager
+    private val screenCaptureManager: ScreenCaptureManager,
+    private val errorRecoveryManager: ErrorRecoveryManager? = null
 ) {
     private var mediaProjection: MediaProjection? = null
 
@@ -16,6 +18,7 @@ class MediaProjectionHolder(
         override fun onStop() {
             mediaProjection = null
             screenCaptureManager.stop()
+            errorRecoveryManager?.onMediaProjectionRevoked()
         }
     }
 
@@ -34,6 +37,7 @@ class MediaProjectionHolder(
         projection.registerCallback(revocationCallback, null)
         mediaProjection = projection
         screenCaptureManager.start(projection)
+        errorRecoveryManager?.onMediaProjectionGranted()
     }
 
     fun getMediaProjection(): MediaProjection? = mediaProjection
