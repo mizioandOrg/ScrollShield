@@ -107,10 +107,10 @@ The technical spec has been decomposed into 18 self-contained work items, each i
 | ~~08~~ | ~~Ad Counter~~ | ~~Overlay UI, session management, time budget nudges~~ |
 | ~~09~~ | ~~Scroll Mask Pre-Scan~~ | ~~Pre-scan phase, ScanMap, loading overlay~~ |
 | ~~10~~ | ~~Scroll Mask Live Mode~~ | ~~Live skip, lookahead extension, consecutive skip handling~~ |
-| 11 | Onboarding & Settings | 9-screen onboarding, MediaProjection permission, settings UI |
+| ~~11~~ | ~~Onboarding & Settings~~ | ~~9-screen onboarding, MediaProjection permission, settings UI~~ |
 | 12 | Signature Sync | WiFi sync worker, local learning, visual signatures, expiry cleanup |
 | 13 | Session Analytics | Weekly/monthly reports, classification method breakdown |
-| 14 | Error Handling | Recovery strategies, MediaProjection revocation, diagnostics |
+| ~~14~~ | ~~Error Handling~~ | ~~Recovery strategies, MediaProjection revocation, diagnostics~~ |
 | 15 | Testing & ML Pipeline | Unit/integration tests, benchmarks, ML training scaffold |
 | ~~16~~ | ~~Screen Capture Service~~ | ~~MediaProjection infrastructure, frame capture, privacy controls~~ |
 | 17 | Visual Model Training | Training dataset, MobileNetV3-Small fine-tuning, TFLite export |
