@@ -29,6 +29,12 @@ Thumbs.db
 **/__pycache__/
 *.pyc
 
+# ML training artifacts (regenerable)
+ml/checkpoints/
+ml/_artifacts/
+ml/eval/_artifacts/
+app/src/main/_ml_export_intermediate/
+
 # Secrets — never commit these
 *.keystore
 *.jks

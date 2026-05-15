@@ -15,8 +15,8 @@ android {
         applicationId = "com.scrollshield"
         minSdk = 28
         targetSdk = 36
-        versionCode = 20
-        versionName = "0.17.0-alpha"
+        versionCode = 21
+        versionName = "0.18.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -46,6 +46,23 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = false
+        }
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            it.maxHeapSize = "2g"
+        }
+    }
+
+    sourceSets {
+        getByName("test") {
+            resources.srcDirs("src/test/resources")
+        }
+        getByName("androidTest") {
+            assets.srcDirs("src/androidTest/assets")
         }
     }
 
@@ -96,6 +113,49 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation("io.mockk:mockk:1.13.10")
+    testImplementation("io.mockk:mockk-android:1.13.10")
+    testImplementation("com.google.truth:truth:1.4.2")
+    testImplementation("androidx.test:core:1.5.0")
+    testImplementation("androidx.test.ext:junit:1.1.5")
+    testImplementation("androidx.arch.core:core-testing:2.2.0")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.json:json:20231013")
+
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation("io.mockk:mockk-android:1.13.10")
+    androidTestImplementation("androidx.test:core:1.5.0")
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test:rules:1.5.0")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    androidTestImplementation("androidx.benchmark:benchmark-junit4:1.2.4")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+}
+
+// ---- WI-15: perf gate ----
+// Reads ${buildDir}/perf/perf-report.json (produced by perf unit tests) and
+// fails the build if medianClassificationLatencyMs exceeds 120 ms.
+tasks.register("perfGateCheck") {
+    description = "Validates classification latency from perf-report.json"
+    group = "verification"
+    dependsOn("testDebugUnitTest")
+    doLast {
+        val reportFile = file("${layout.buildDirectory.get().asFile}/perf/perf-report.json")
+        if (!reportFile.exists()) {
+            throw GradleException("Perf report not found at ${reportFile.absolutePath}. Did perf tests run?")
+        }
+        val text = reportFile.readText()
+        val regex = Regex("\"medianClassificationLatencyMs\"\\s*:\\s*([0-9.]+)")
+        val match = regex.find(text)
+            ?: throw GradleException("medianClassificationLatencyMs missing in perf report")
+        val median = match.groupValues[1].toDouble()
+        if (median > 120.0) {
+            throw GradleException(
+                "FAIL: classification latency gate — medianClassificationLatencyMs=$median exceeds 120 ms"
+            )
+        }
+        println("[perfGateCheck] OK medianClassificationLatencyMs=$median")
+    }
 }
