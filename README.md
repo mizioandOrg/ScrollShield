@@ -93,7 +93,7 @@ orchestration/                   # PRI process artifacts and checkpoints
 
 ## Work Items
 
-The technical spec has been decomposed into 18 self-contained work items, each implementable in a single agent session:
+The technical spec has been decomposed into 19 self-contained work items, each implementable in a single agent session:
 
 | # | Work Item | Scope |
 |---|-----------|-------|
@@ -115,6 +115,7 @@ The technical spec has been decomposed into 18 self-contained work items, each i
 | ~~16~~ | ~~Screen Capture Service~~ | ~~MediaProjection infrastructure, frame capture, privacy controls~~ |
 | 17 | Visual Model Training | Training dataset, MobileNetV3-Small fine-tuning, TFLite export |
 | 18 | Visual Signature Matching | On-device benchmark, perceptual hash matching, optimization |
+| 19 | CI Android Emulator Pipeline | GitHub Actions workflow: lint+unit, assemble, instrumented tests on API 33 emulator |
 
 ### Build Order
 
