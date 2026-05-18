@@ -1,0 +1,6 @@
+# DVC pointer placeholder — production dataset versions tracked separately.
+outs:
+- md5: 00000000000000000000000000000000
+  size: 0
+  nfiles: 0
+  path: screenshots

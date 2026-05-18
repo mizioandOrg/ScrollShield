@@ -1,0 +1,22 @@
+{
+  "train": [
+    "smoke_organic_tiktok_0000",
+    "smoke_official_ad_tiktok_0000",
+    "smoke_influencer_promo_tiktok_0000",
+    "smoke_engagement_bait_instagram_0000",
+    "smoke_outrage_trigger_instagram_0000",
+    "smoke_educational_youtube_0000",
+    "smoke_unknown_youtube_0000"
+  ],
+  "val": [
+    "smoke_organic_tiktok_0001",
+    "smoke_official_ad_tiktok_0001",
+    "smoke_influencer_promo_tiktok_0001",
+    "smoke_engagement_bait_instagram_0001"
+  ],
+  "test": [
+    "smoke_outrage_trigger_instagram_0001",
+    "smoke_educational_youtube_0001",
+    "smoke_unknown_youtube_0001"
+  ]
+}
